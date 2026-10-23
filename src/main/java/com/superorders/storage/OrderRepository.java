@@ -143,10 +143,10 @@ public final class OrderRepository implements AutoCloseable {
     }
 
     public synchronized int pendingTransactionCount() throws SQLException {
-        try(PreparedStatement p=connection.prepareStatement("SELECT COUNT(*) FROM order_transactions WHERE state IN ('ESCROW_WITHDRAW_PENDING','ITEMS_RESERVED','PAYMENT_PENDING','FAILED_REQUIRES_REVIEW')");ResultSet r=p.executeQuery()){return r.next()?r.getInt(1):0;}
+        try(PreparedStatement p=connection.prepareStatement("SELECT COUNT(*) FROM order_transactions WHERE state IN ('ESCROW_WITHDRAW_PENDING','DELIVERY_PREPARED','ITEMS_RESERVED','PAYMENT_PENDING','FAILED_REQUIRES_REVIEW')");ResultSet r=p.executeQuery()){return r.next()?r.getInt(1):0;}
     }
     public synchronized int pendingRefundCount() throws SQLException {
-        try (PreparedStatement p=connection.prepareStatement("SELECT COUNT(*) FROM recovery_obligations WHERE state=?")) { p.setString(1,"PENDING"); try(ResultSet r=p.executeQuery()){return r.next()?r.getInt(1):0;} }
+        try (PreparedStatement p=connection.prepareStatement("SELECT COUNT(*) FROM recovery_obligations WHERE state IN ('PENDING','REVIEW','PROCESSING')")) { try(ResultSet r=p.executeQuery()){return r.next()?r.getInt(1):0;} }
     }
     public synchronized void setStatus(long id, OrderStatus status) throws SQLException {
         try(PreparedStatement p=connection.prepareStatement("UPDATE orders SET status=? WHERE id=? AND status=?")){p.setString(1,status.name());p.setLong(2,id);p.setString(3,OrderStatus.ACTIVE.name());if(p.executeUpdate()!=1)throw new SQLException("Order is not active");}
