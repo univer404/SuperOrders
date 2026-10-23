@@ -30,13 +30,13 @@ public final class MarketInventoryListener implements Listener {
         int slot=e.getRawSlot();
         MarketHolder holder=(MarketHolder)e.getView().getTopInventory().getHolder();
         int size=e.getView().getTopInventory().getSize();
-        if(slot==size-9){ if(holder.page>0)openMarket(p,holder.page-1,holder.query,holder.sort); return; }
-        if(slot==size-1){ openMarket(p,holder.page+1,holder.query,holder.sort); return; }
-        if(slot==size-8){inputs.put(p.getUniqueId(),new InputState("market-search",null,holder.page,0,holder.sort.ordinal(),System.currentTimeMillis()+60_000));p.closeInventory();p.sendMessage("Search by item material, owner name, or order ID. Type a search term, or type cancel to stop.");return;}
-        if(slot==size-7){openMarket(p,0,holder.query,MarketSort.values()[(holder.sort.ordinal()+1)%MarketSort.values().length]);return;}
-        if(slot==size-4){if(p.hasPermission("superorders.mine"))openMine(p);else msgNoPermission(p);return;}
-        if(slot==size-3){if(p.hasPermission("superorders.history"))openHistory(p);else msgNoPermission(p);return;}
-        if(slot==size-5){e.setCancelled(true);if(!p.hasPermission("superorders.create")){p.sendMessage("You do not have permission to create orders.");return;}p.closeInventory();beginCreate(p);return;}
+        if(slot==configuredSlot("previous-slot",size,9)){ if(holder.page>0)openMarket(p,holder.page-1,holder.query,holder.sort); return; }
+        if(slot==configuredSlot("next-slot",size,1)){ openMarket(p,holder.page+1,holder.query,holder.sort); return; }
+        if(slot==configuredSlot("search-slot",size,8)){inputs.put(p.getUniqueId(),new InputState("market-search",null,holder.page,0,holder.sort.ordinal(),System.currentTimeMillis()+60_000));p.closeInventory();p.sendMessage("Search by item material, owner name, or order ID. Type a search term, or type cancel to stop.");return;}
+        if(slot==configuredSlot("sort-slot",size,7)){openMarket(p,0,holder.query,MarketSort.values()[(holder.sort.ordinal()+1)%MarketSort.values().length]);return;}
+        if(slot==configuredSlot("mine-slot",size,4)){if(p.hasPermission("superorders.mine"))openMine(p);else msgNoPermission(p);return;}
+        if(slot==configuredSlot("history-slot",size,3)){if(p.hasPermission("superorders.history"))openHistory(p);else msgNoPermission(p);return;}
+        if(slot==configuredSlot("create-slot",size,5)){e.setCancelled(true);if(!p.hasPermission("superorders.create")){p.sendMessage("You do not have permission to create orders.");return;}p.closeInventory();beginCreate(p);return;}
         ItemStack item=e.getCurrentItem();if(item==null||item.getType().isAir()||!item.hasItemMeta())return;
         var lore=item.getItemMeta().lore();if(lore==null)return;
         for(var line:lore){String plain=net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(line);if(plain.startsWith("Order #"))try{beginDelivery(p,Long.parseLong(plain.substring(7)));return;}catch(NumberFormatException ignored){}}
@@ -102,13 +102,13 @@ public final class MarketInventoryListener implements Listener {
                 case NEWEST->Comparator.comparingLong(BuyOrder::createdAt).reversed();
             };
             list.sort(comparator);
-            int size=Math.max(27,Math.min(54,plugin.getConfig().getInt("marketplace.size",54)));
+            int size=Math.max(27,Math.min(54,plugin.guiConfig().getInt("marketplace.size",plugin.getConfig().getInt("marketplace.size",54))));
             size=((size+8)/9)*9;
             int contentSlots=size-9;
             int maxPage=Math.max(0,(list.size()-1)/contentSlots);
             int page=Math.max(0,Math.min(requestedPage,maxPage));
             Inventory inv=Bukkit.createInventory(new MarketHolder(page,normalized,sort),size,
-                    mm.deserialize(plugin.getConfig().getString("marketplace.title","<dark_purple>SuperOrders</dark_purple>")));
+                    mm.deserialize(plugin.guiConfig().getString("marketplace.title",plugin.getConfig().getString("marketplace.title","<dark_purple>SuperOrders</dark_purple>"))));
             int start=page*contentSlots;
             int end=Math.min(list.size(),start+contentSlots);
             int slot=0;
@@ -126,15 +126,20 @@ public final class MarketInventoryListener implements Listener {
                 inv.setItem(slot++,icon);
             }
             if(list.isEmpty())inv.setItem(size/2,named(Material.PAPER,normalized.isEmpty()?"<gray>No active orders":"<gray>No orders match your search"));
-            if(page>0)inv.setItem(size-9,named(Material.ARROW,"<yellow>Previous Page"));
-            inv.setItem(size-8,named(Material.COMPASS,"<aqua>Search: "+(normalized.isEmpty()?"none":normalized)));
-            inv.setItem(size-7,named(Material.HOPPER,"<aqua>Sort: "+sort.label+" (click to change)"));
-            inv.setItem(size-5,named(Material.EMERALD,"<green>Create Order"));
-            inv.setItem(size-4,named(Material.BOOK,"<yellow>My Orders"));
-            inv.setItem(size-3,named(Material.WRITABLE_BOOK,"<yellow>Transaction History"));
-            if(page<maxPage)inv.setItem(size-1,named(Material.ARROW,"<yellow>Next Page"));
+            if(page>0)inv.setItem(configuredSlot("previous-slot",size,9),named(Material.ARROW,"<yellow>Previous Page"));
+            inv.setItem(configuredSlot("search-slot",size,8),named(Material.COMPASS,"<aqua>Search: "+(normalized.isEmpty()?"none":normalized)));
+            inv.setItem(configuredSlot("sort-slot",size,7),named(Material.HOPPER,"<aqua>Sort: "+sort.label+" (click to change)"));
+            inv.setItem(configuredSlot("create-slot",size,5),named(Material.EMERALD,"<green>Create Order"));
+            inv.setItem(configuredSlot("mine-slot",size,4),named(Material.BOOK,"<yellow>My Orders"));
+            inv.setItem(configuredSlot("history-slot",size,3),named(Material.WRITABLE_BOOK,"<yellow>Transaction History"));
+            if(page<maxPage)inv.setItem(configuredSlot("next-slot",size,1),named(Material.ARROW,"<yellow>Next Page"));
             p.openInventory(inv);
         } catch(Exception ex){plugin.getLogger().severe("Marketplace query failed: "+ex.getMessage());p.sendMessage("Marketplace could not be loaded.");}
+    }
+    private int configuredSlot(String key,int size,int fallbackOffset) {
+        int fallback=size-fallbackOffset;
+        int configured=plugin.guiConfig().getInt("marketplace."+key,fallback);
+        return configured>=size-9&&configured<size ? configured : fallback;
     }
     private void msgNoPermission(Player p){p.sendMessage("You do not have permission to use that menu.");}
     public void openHistory(Player p) {
