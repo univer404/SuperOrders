@@ -4,6 +4,8 @@ import com.superorders.SuperOrders;
 import com.superorders.model.BuyOrder;
 import com.superorders.model.OrderStatus;
 import com.superorders.service.OrderService;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -112,7 +114,7 @@ public final class MarketInventoryListener implements Listener {
             int maxPage=Math.max(0,(list.size()-1)/contentSlots);
             int page=Math.max(0,Math.min(requestedPage,maxPage));
             Inventory inv=Bukkit.createInventory(new MarketHolder(page,normalized,sort),size,
-                    mm.deserialize(plugin.guiConfig().getString("marketplace.title",plugin.getConfig().getString("marketplace.title","<dark_purple>SuperOrders</dark_purple>"))));
+                    text(plugin.guiConfig().getString("marketplace.title",plugin.getConfig().getString("marketplace.title","<dark_purple>SuperOrders</dark_purple>"))));
             // Keep the marketplace visually organized: a compact item grid above a dedicated control bar.
             for(int i=contentSlots;i<size;i++) inv.setItem(i,named(Material.GRAY_STAINED_GLASS_PANE,"<dark_gray> "));
             int start=page*contentSlots;
@@ -298,6 +300,11 @@ public final class MarketInventoryListener implements Listener {
             default->{inputs.remove(p.getUniqueId());p.sendMessage("That operation is not available.");}
         }}catch(Exception ex){p.sendMessage("SuperOrders: "+(ex.getMessage()==null?"Input rejected.":ex.getMessage()));}
     }
+    // Minecraft item names and lore default to italic. Disable it consistently for straight, readable GUI text.
+    private Component text(String input) {
+        return mm.deserialize(input).decoration(TextDecoration.ITALIC, false);
+    }
+
     private ItemStack named(Material material,String title){ItemStack i=new ItemStack(material);ItemMeta m=i.getItemMeta();m.displayName(mm.deserialize(title));i.setItemMeta(m);return i;}
     private enum MarketSort {
         NEWEST("Newest"), PRICE_LOW("Lowest Price"), PRICE_HIGH("Highest Price");
