@@ -2,6 +2,7 @@ package com.superorders.storage;
 
 import com.superorders.model.BuyOrder;
 import com.superorders.model.OrderStatus;
+import com.superorders.model.TransactionRecord;
 import org.bukkit.Material;
 import java.io.File;
 import java.sql.*;
@@ -47,6 +48,11 @@ public final class OrderRepository implements AutoCloseable {
     public synchronized List<BuyOrder> expiredActiveOrders(long now) throws SQLException { List<BuyOrder> out=new ArrayList<>(); try(PreparedStatement p=connection.prepareStatement("SELECT * FROM orders WHERE status=? AND expires_at<=?")){p.setString(1,OrderStatus.ACTIVE.name());p.setLong(2,now);try(ResultSet r=p.executeQuery()){while(r.next())out.add(map(r));}}return out; }
     public synchronized int countActive(UUID owner) throws SQLException {
         try(PreparedStatement p=connection.prepareStatement("SELECT COUNT(*) FROM orders WHERE owner_uuid=? AND status=?")) { p.setString(1,owner.toString()); p.setString(2,OrderStatus.ACTIVE.name()); try(ResultSet r=p.executeQuery()){return r.next()?r.getInt(1):0;} }
+    }
+    public synchronized List<TransactionRecord> historyFor(UUID actor, int limit) throws SQLException {
+        List<TransactionRecord> out=new ArrayList<>();
+        try(PreparedStatement p=connection.prepareStatement("SELECT * FROM order_transactions WHERE actor_uuid=? ORDER BY created_at DESC LIMIT ?")){p.setString(1,actor.toString());p.setInt(2,Math.max(1,Math.min(100,limit)));try(ResultSet r=p.executeQuery()){while(r.next())out.add(new TransactionRecord(r.getString("transaction_id"),r.getLong("order_id"),r.getString("actor_uuid"),r.getInt("quantity"),r.getDouble("amount"),r.getString("state"),r.getLong("created_at"),r.getString("details")));}}
+        return out;
     }
     public synchronized boolean hasUnresolvedDelivery(long orderId) throws SQLException {
         try(PreparedStatement p=connection.prepareStatement("SELECT COUNT(*) FROM order_transactions WHERE order_id=? AND state IN ('DELIVERY_PREPARED','ITEMS_RESERVED','PAYMENT_PENDING','FAILED_REQUIRES_REVIEW')")){p.setLong(1,orderId);try(ResultSet r=p.executeQuery()){return r.next()&&r.getInt(1)>0;}}
