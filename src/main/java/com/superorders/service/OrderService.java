@@ -26,7 +26,8 @@ public final class OrderService {
         var blocked = plugin.getConfig().getStringList("orders.blocked-materials");
         if (!allowed.isEmpty() && !allowed.contains(material.name())) throw new IllegalArgumentException("That material is not allowed.");
         if (blocked.contains(material.name())) throw new IllegalArgumentException("That material is blocked.");
-        if (plugin.economy().getBalance(player) + 1e-8 < total) throw new IllegalArgumentException("You do not have enough money.");
+        double balance = plugin.economy().getBalance(player);
+        if (!Double.isFinite(balance) || balance + 1e-8 < total) throw new IllegalArgumentException("Your balance could not be validated or is too low.");
         String transactionId = plugin.repository().recordTransaction(player.getUniqueId(), 0, quantity, total, "ESCROW_WITHDRAW_PENDING",
                 "Order creation intent; material=" + material.name() + "; owner=" + player.getUniqueId());
         var response = plugin.economy().withdrawPlayer(player, total);
