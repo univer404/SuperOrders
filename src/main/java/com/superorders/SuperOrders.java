@@ -16,7 +16,7 @@ public final class SuperOrders extends JavaPlugin {
     private OrderService orderService;
     private MarketInventoryListener marketListener;
     @Override public void onEnable() {
-        saveDefaultConfig(); saveResource("messages.yml", false);
+        saveDefaultConfig(); saveResource("messages.yml", false); saveResource("gui.yml", false);
         if (!setupEconomy()) { getLogger().severe("Vault-compatible economy provider not found. Disabling SuperOrders."); getServer().getPluginManager().disablePlugin(this); return; }
         try { if (!getDataFolder().exists() && !getDataFolder().mkdirs()) throw new SQLException("Cannot create plugin data folder"); repository = new OrderRepository(new File(getDataFolder(),getConfig().getString("database.file","orders.db"))); }
         catch(SQLException e){getLogger().severe("SQLite initialization failed: "+e.getMessage());getServer().getPluginManager().disablePlugin(this);return;}
