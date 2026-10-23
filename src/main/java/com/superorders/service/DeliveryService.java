@@ -14,6 +14,7 @@ public final class DeliveryService {
 
     public double deliver(Player seller, long orderId, int quantity) throws Exception {
         if (quantity < 1) throw new IllegalArgumentException("Quantity must be positive.");
+        if (quantity > plugin.getConfig().getInt("delivery.max-items-per-delivery", 23040)) throw new IllegalArgumentException("That delivery exceeds the configured maximum.");
         ReentrantLock lock=plugin.orderService().lockFor(orderId);
         lock.lock();
         try {
