@@ -125,7 +125,7 @@ public final class OrderRepository implements AutoCloseable {
     public synchronized List<TransactionRecord> pendingTransactions(int limit) throws SQLException {
         List<TransactionRecord> out = new ArrayList<>();
         try (PreparedStatement p = connection.prepareStatement(
-                "SELECT * FROM order_transactions WHERE state IN ('ESCROW_WITHDRAW_PENDING','DELIVERY_PREPARED','ITEMS_RESERVED','PAYMENT_PENDING','ITEM_RESTORE_PENDING','FAILED_REQUIRES_REVIEW') ORDER BY created_at ASC LIMIT ?")) {
+                "SELECT * FROM order_transactions WHERE state IN ('ESCROW_WITHDRAW_PENDING','ESCROW_REFUND_PENDING','DELIVERY_PREPARED','ITEMS_RESERVED','PAYMENT_PENDING','ITEM_RESTORE_PENDING','FAILED_REQUIRES_REVIEW') ORDER BY created_at ASC LIMIT ?")) {
             p.setInt(1, Math.max(1, Math.min(100, limit)));
             try (ResultSet r = p.executeQuery()) {
                 while (r.next()) out.add(new TransactionRecord(r.getString("transaction_id"), r.getLong("order_id"),
@@ -180,7 +180,7 @@ public final class OrderRepository implements AutoCloseable {
     }
 
     public synchronized int pendingTransactionCount() throws SQLException {
-        try(PreparedStatement p=connection.prepareStatement("SELECT COUNT(*) FROM order_transactions WHERE state IN ('ESCROW_WITHDRAW_PENDING','DELIVERY_PREPARED','ITEMS_RESERVED','PAYMENT_PENDING','ITEM_RESTORE_PENDING','FAILED_REQUIRES_REVIEW')");ResultSet r=p.executeQuery()){return r.next()?r.getInt(1):0;}
+        try(PreparedStatement p=connection.prepareStatement("SELECT COUNT(*) FROM order_transactions WHERE state IN ('ESCROW_WITHDRAW_PENDING','ESCROW_REFUND_PENDING','DELIVERY_PREPARED','ITEMS_RESERVED','PAYMENT_PENDING','ITEM_RESTORE_PENDING','FAILED_REQUIRES_REVIEW')");ResultSet r=p.executeQuery()){return r.next()?r.getInt(1):0;}
     }
     public synchronized int pendingRefundCount() throws SQLException {
         try (PreparedStatement p=connection.prepareStatement("SELECT COUNT(*) FROM recovery_obligations WHERE state IN ('PENDING','REVIEW','PROCESSING')")) { try(ResultSet r=p.executeQuery()){return r.next()?r.getInt(1):0;} }
