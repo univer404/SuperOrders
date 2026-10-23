@@ -1,7 +1,5 @@
 general:
   debug: false
-database:
-  file: orders.db
 orders:
   max-quantity: 23040
   min-unit-price: 0.01
