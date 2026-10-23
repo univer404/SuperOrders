@@ -20,6 +20,16 @@ public final class OrderRepository implements AutoCloseable {
             s.executeUpdate("CREATE TABLE IF NOT EXISTS recovery_obligations(obligation_id TEXT PRIMARY KEY, player_uuid TEXT NOT NULL, amount REAL NOT NULL, reason TEXT NOT NULL, state TEXT NOT NULL, created_at INTEGER NOT NULL)");
         }
     }
+    public synchronized String recordTransaction(UUID actor, long orderId, int quantity, double amount, String state, String details) throws SQLException {
+        String id=UUID.randomUUID().toString();
+        try(PreparedStatement p=connection.prepareStatement("INSERT INTO order_transactions(transaction_id,order_id,actor_uuid,quantity,amount,state,created_at,details) VALUES(?,?,?,?,?,?,?,?)")) {
+            p.setString(1,id);p.setLong(2,orderId);p.setString(3,actor.toString());p.setInt(4,quantity);p.setDouble(5,amount);p.setString(6,state);p.setLong(7,System.currentTimeMillis());p.setString(8,details==null?"":details);p.executeUpdate();
+        }
+        return id;
+    }
+    public synchronized void setTransactionState(String id, String state, String details) throws SQLException {
+        try(PreparedStatement p=connection.prepareStatement("UPDATE order_transactions SET state=?,details=? WHERE transaction_id=?")){p.setString(1,state);p.setString(2,details==null?"":details);p.setString(3,id);if(p.executeUpdate()!=1)throw new SQLException("Transaction record missing");}
+    }
     public synchronized long create(UUID owner, String name, Material material, int quantity, double price, double escrow, long created, long expires) throws SQLException {
         String sql = "INSERT INTO orders(owner_uuid,owner_name,material,original_quantity,remaining_quantity,unit_price,remaining_escrow,created_at,expires_at,status) VALUES(?,?,?,?,?,?,?,?,?,?)";
         try (PreparedStatement p = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
