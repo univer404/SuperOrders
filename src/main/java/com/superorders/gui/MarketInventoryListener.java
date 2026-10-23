@@ -113,6 +113,8 @@ public final class MarketInventoryListener implements Listener {
             int page=Math.max(0,Math.min(requestedPage,maxPage));
             Inventory inv=Bukkit.createInventory(new MarketHolder(page,normalized,sort),size,
                     mm.deserialize(plugin.guiConfig().getString("marketplace.title",plugin.getConfig().getString("marketplace.title","<dark_purple>SuperOrders</dark_purple>"))));
+            // Keep the marketplace visually organized: a compact item grid above a dedicated control bar.
+            for(int i=contentSlots;i<size;i++) inv.setItem(i,named(Material.GRAY_STAINED_GLASS_PANE,"<dark_gray> "));
             int start=page*contentSlots;
             int end=Math.min(list.size(),start+contentSlots);
             int slot=0;
@@ -120,22 +122,23 @@ public final class MarketInventoryListener implements Listener {
                 BuyOrder o=list.get(index);
                 ItemStack icon=new ItemStack(o.material());
                 ItemMeta m=icon.getItemMeta();
-                m.displayName(mm.deserialize("<light_purple>"+o.material().name().replace('_',' ')+"</light_purple>"));
+                m.displayName(mm.deserialize("<aqua><bold>"+o.material().name().replace('_',' ')+"</bold></aqua>"));
                 m.lore(List.of(mm.deserialize("<gray>Owner: <white>"+o.ownerName()),
                         mm.deserialize("<gray>Remaining: <white>"+o.remainingQuantity()),
-                        mm.deserialize("<gray>Price each: <white>"+o.unitPrice()),
-                        mm.deserialize("<gray>Remaining value: <white>"+o.remainingValue()),
-                        mm.deserialize("<yellow>Order #"+o.id())));
+                        mm.deserialize("<gray>Unit price: <green>"+o.unitPrice()),
+                        mm.deserialize("<gray>Order value: <green>"+o.remainingValue()),
+                        mm.deserialize("<dark_gray>Order #"+o.id()),
+                        mm.deserialize("<yellow>Click to deliver items")));
                 icon.setItemMeta(m);
                 inv.setItem(slot++,icon);
             }
             if(list.isEmpty())inv.setItem(size/2,named(Material.PAPER,normalized.isEmpty()?"<gray>No active orders":"<gray>No orders match your search"));
             if(page>0)inv.setItem(configuredSlot("previous-slot",size,9),named(Material.ARROW,"<yellow>Previous Page"));
-            inv.setItem(configuredSlot("search-slot",size,8),named(Material.COMPASS,"<aqua>Search: "+(normalized.isEmpty()?"none":normalized)));
-            inv.setItem(configuredSlot("sort-slot",size,7),named(Material.HOPPER,"<aqua>Sort: "+sort.label+" (click to change)"));
+            inv.setItem(configuredSlot("search-slot",size,8),named(Material.COMPASS,"<aqua>Search"));
+            inv.setItem(configuredSlot("sort-slot",size,7),named(Material.HOPPER,"<aqua>Sort: "+sort.label));
             inv.setItem(configuredSlot("create-slot",size,5),named(Material.EMERALD,"<green>Create Order"));
             inv.setItem(configuredSlot("mine-slot",size,4),named(Material.BOOK,"<yellow>My Orders"));
-            inv.setItem(configuredSlot("history-slot",size,3),named(Material.WRITABLE_BOOK,"<yellow>Transaction History"));
+            inv.setItem(configuredSlot("history-slot",size,3),named(Material.WRITABLE_BOOK,"<yellow>History"));
             if(page<maxPage)inv.setItem(configuredSlot("next-slot",size,1),named(Material.ARROW,"<yellow>Next Page"));
             p.openInventory(inv);
         } catch(Exception ex){plugin.getLogger().severe("Marketplace query failed: "+ex.getMessage());p.sendMessage("Marketplace could not be loaded.");}
@@ -149,7 +152,7 @@ public final class MarketInventoryListener implements Listener {
     public void openHistory(Player p) {
         try {
             var records=plugin.repository().historyFor(p.getUniqueId(),45);
-            Inventory inv=Bukkit.createInventory(new HistoryHolder(),54,mm.deserialize("<dark_purple>SuperOrders History</dark_purple>"));
+            Inventory inv=Bukkit.createInventory(new HistoryHolder(),54,mm.deserialize("<dark_gray>Orders History</dark_gray>"));
             int slot=0;
             for(var record:records) {
                 ItemStack icon=new ItemStack(Material.PAPER);
@@ -174,7 +177,7 @@ public final class MarketInventoryListener implements Listener {
         try {
             List<BuyOrder> list=plugin.repository().ordersFor(p.getUniqueId());
             int size=54;
-            Inventory inv=Bukkit.createInventory(new ManageHolder(p.getUniqueId()),size,mm.deserialize("<dark_purple>Your SuperOrders</dark_purple>"));
+            Inventory inv=Bukkit.createInventory(new ManageHolder(p.getUniqueId()),size,mm.deserialize("<dark_gray>My Buy Orders</dark_gray>"));
             int slot=0;
             for(BuyOrder o:list) {
                 if(slot>=45)break;
@@ -199,7 +202,7 @@ public final class MarketInventoryListener implements Listener {
     private void openMaterialPicker(Player p,int requestedPage){
         List<Material> materials=Arrays.stream(Material.values()).filter(Material::isItem).filter(m->!m.isAir()).sorted(Comparator.comparing(Material::name)).toList();
         int perPage=45, maxPage=Math.max(0,(materials.size()-1)/perPage), page=Math.max(0,Math.min(requestedPage,maxPage));
-        Inventory inv=Bukkit.createInventory(new CreateHolder("picker",page,null,16,1.0),54,mm.deserialize("<dark_purple>Select Order Item</dark_purple>"));
+        Inventory inv=Bukkit.createInventory(new CreateHolder("picker",page,null,16,1.0),54,mm.deserialize("<dark_gray>Select Item</dark_gray>"));
         int start=page*perPage,end=Math.min(materials.size(),start+perPage);
         for(int i=start;i<end;i++){Material material=materials.get(i);ItemStack icon=new ItemStack(material);ItemMeta meta=icon.getItemMeta();meta.displayName(mm.deserialize("<light_purple>"+material.name().replace('_',' ')+"</light_purple>"));meta.lore(List.of(mm.deserialize("<gray>Click to select this item")));icon.setItemMeta(meta);inv.setItem(i-start,icon);}
         if(page>0)inv.setItem(45,named(Material.ARROW,"<yellow>Previous Items"));
@@ -208,7 +211,7 @@ public final class MarketInventoryListener implements Listener {
         p.openInventory(inv);
     }
     private void openCreateSettings(Player p,Material material,int quantity,double price){
-        Inventory inv=Bukkit.createInventory(new CreateHolder("settings",0,material,quantity,price),27,mm.deserialize("<dark_purple>Configure Buy Order</dark_purple>"));
+        Inventory inv=Bukkit.createInventory(new CreateHolder("settings",0,material,quantity,price),27,mm.deserialize("<dark_gray>Configure Order</dark_gray>"));
         inv.setItem(4,named(material,"<light_purple>"+material.name().replace('_',' ')+"</light_purple>"));
         inv.setItem(10,named(Material.REDSTONE,"<red>Decrease Quantity"));
         inv.setItem(11,named(Material.LIME_DYE,"<green>Increase Quantity"));
@@ -264,7 +267,7 @@ public final class MarketInventoryListener implements Listener {
         if(order==null||order.status()!=OrderStatus.ACTIVE){p.sendMessage("That order is no longer active or could not be loaded.");return;}
         int safeMax=Math.min(maxQuantity,order.remainingQuantity());
         int safeQuantity=Math.max(1,Math.min(quantity,safeMax));
-        Inventory inv=Bukkit.createInventory(new DeliveryHolder(id,material,safeMax,safeQuantity),27,mm.deserialize("<dark_purple>Order #"+id+" Delivery</dark_purple>"));
+        Inventory inv=Bukkit.createInventory(new DeliveryHolder(id,material,safeMax,safeQuantity),27,mm.deserialize("<dark_gray>Deliver to Order #"+id+"</dark_gray>"));
         ItemStack info=named(material,"<light_purple>"+material.name().replace('_',' ')+"</light_purple>");
         ItemMeta meta=info.getItemMeta();
         meta.lore(List.of(mm.deserialize("<gray>Requested: <white>"+order.remainingQuantity()),
