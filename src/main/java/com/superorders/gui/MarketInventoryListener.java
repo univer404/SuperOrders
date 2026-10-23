@@ -41,7 +41,7 @@ public final class MarketInventoryListener implements Listener {
             if(list.isEmpty())inv.setItem(size/2,named(Material.PAPER,"<gray>No active orders"));inv.setItem(size-5,named(Material.EMERALD,"<green>Create Order"));p.openInventory(inv);
         }catch(Exception ex){plugin.getLogger().severe("Marketplace query failed: "+ex.getMessage());p.sendMessage("Marketplace could not be loaded.");}
     }
-    private void beginCreate(Player p){inputs.put(p.getUniqueId(),new InputState("material",null,0,0,0,System.currentTimeMillis()+60_000));p.sendMessage("Type the item material (e.g. DIAMOND), or cancel:");}
+    public void beginCreate(Player p){inputs.put(p.getUniqueId(),new InputState("material",null,0,0,0,System.currentTimeMillis()+60_000));p.sendMessage("Type the item material (e.g. DIAMOND), or cancel:");}
     private void beginDelivery(Player p,long id){try{BuyOrder o=plugin.repository().find(id);if(o==null||o.status()!=OrderStatus.ACTIVE||o.expiresAt()<=System.currentTimeMillis()){p.sendMessage("That order is no longer available.");return;}inputs.put(p.getUniqueId(),new InputState("deliver",null,id,0,0,System.currentTimeMillis()+60_000));p.sendMessage("Order #"+id+" requests "+o.remainingQuantity()+" "+o.material()+". Delivery is currently disabled until crash-safe item reservation is implemented.");}catch(Exception ex){p.sendMessage("Could not load order.");}}
     @EventHandler public void onChat(AsyncPlayerChatEvent e){Player p=e.getPlayer();InputState s=inputs.get(p.getUniqueId());if(s==null)return;e.setCancelled(true);String msg=e.getMessage().trim();Bukkit.getScheduler().runTask(plugin,()->process(p,s,msg));}
     private void process(Player p,InputState s,String msg){
