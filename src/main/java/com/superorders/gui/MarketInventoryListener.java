@@ -82,7 +82,7 @@ public final class MarketInventoryListener implements Listener {
         if(slot==10){openDelivery(p,holder.orderId,holder.material,holder.maxQuantity,Math.max(1,holder.quantity-1));return;}
         if(slot==16){openDelivery(p,holder.orderId,holder.material,holder.maxQuantity,Math.min(holder.maxQuantity,holder.quantity+1));return;}
         if(slot==22){
-            BuyOrder order=plugin.repository().find(holder.orderId);
+            BuyOrder order=findOrderQuietly(holder.orderId);
             if(order==null||order.status()!=OrderStatus.ACTIVE||holder.quantity>order.remainingQuantity()){p.sendMessage("Order changed. Reopen the marketplace and try again.");p.closeInventory();return;}
             double total=order.unitPrice()*holder.quantity;
             inputs.put(p.getUniqueId(),new InputState("deliver-confirm",holder.material,holder.orderId,holder.quantity,total,System.currentTimeMillis()+60_000));
@@ -255,9 +255,13 @@ public final class MarketInventoryListener implements Listener {
             openDelivery(p,id,o.material(),o.remainingQuantity(),1);
         } catch(Exception ex){p.sendMessage("Could not load order.");}
     }
+    private BuyOrder findOrderQuietly(long id){
+        try{return plugin.repository().find(id);}
+        catch(Exception ex){plugin.getLogger().warning("Could not read order #"+id+": "+ex.getMessage());return null;}
+    }
     private void openDelivery(Player p,long id,Material material,int maxQuantity,int quantity){
-        BuyOrder order=plugin.repository().find(id);
-        if(order==null||order.status()!=OrderStatus.ACTIVE){p.sendMessage("That order is no longer active.");return;}
+        BuyOrder order=findOrderQuietly(id);
+        if(order==null||order.status()!=OrderStatus.ACTIVE){p.sendMessage("That order is no longer active or could not be loaded.");return;}
         int safeMax=Math.min(maxQuantity,order.remainingQuantity());
         int safeQuantity=Math.max(1,Math.min(quantity,safeMax));
         Inventory inv=Bukkit.createInventory(new DeliveryHolder(id,material,safeMax,safeQuantity),27,mm.deserialize("<dark_purple>Order #"+id+" Delivery</dark_purple>"));
