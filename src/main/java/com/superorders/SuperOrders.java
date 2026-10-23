@@ -2,6 +2,7 @@ package com.superorders;
 
 import com.superorders.command.OrdersCommand;
 import com.superorders.gui.MarketInventoryListener;
+import com.superorders.integration.SuperOrdersExpansion;
 import com.superorders.service.OrderService;
 import com.superorders.service.DeliveryService;
 import com.superorders.storage.OrderRepository;
@@ -29,7 +30,11 @@ public final class SuperOrders extends JavaPlugin {
         OrdersCommand handler = new OrdersCommand(this);
         getCommand("orders").setExecutor(handler); getCommand("orders").setTabCompleter(handler);
         getServer().getScheduler().runTaskTimer(this, () -> orderService.expireDueOrders(), 20L, 1200L);
-        getLogger().info("SuperOrders foundation loaded; order creation and delivery transactions are not yet production-ready.");
+        if (getServer().getPluginManager().getPlugin("PlaceholderAPI") != null) {
+            new SuperOrdersExpansion(this).register();
+            getLogger().info("PlaceholderAPI expansion registered.");
+        }
+        getLogger().info("SuperOrders loaded. Review the README transaction-safety notes before production use.");
     }
     private boolean setupEconomy(){if(getServer().getPluginManager().getPlugin("Vault")==null)return false;RegisteredServiceProvider<Economy> p=getServer().getServicesManager().getRegistration(Economy.class);if(p==null)return false;economy=p.getProvider();return economy!=null;}
     public Economy economy(){return economy;} public OrderRepository repository(){return repository;} public OrderService orderService(){return orderService;} public DeliveryService deliveryService(){return deliveryService;} public MarketInventoryListener marketListener(){return marketListener;}
