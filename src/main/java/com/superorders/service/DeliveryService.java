@@ -31,7 +31,22 @@ public final class DeliveryService {
             for(ItemStack stack:seller.getInventory().getStorageContents())if(stack!=null&&stack.isSimilar(template))found+=stack.getAmount();
             if(found<quantity)throw new IllegalArgumentException("You do not have enough plain "+material+" items. Named or modified items are not accepted.");
             String tx=plugin.repository().recordTransaction(seller.getUniqueId(),orderId,quantity,amount,"DELIVERY_PREPARED","seller="+seller.getUniqueId()+"; material="+material.name());
-            removeItems(seller,template,quantity);
+            try {
+                removeItems(seller,template,quantity);
+            } catch (RuntimeException reservationFailure) {
+                // Inventory mutation may have partially happened. Never pretend the delivery is clean.
+                try {
+                    plugin.repository().setTransactionState(tx,"FAILED_REQUIRES_REVIEW",
+                            "Item reservation failed and may be partial. Inspect seller inventory before recovery. "
+                                    + reservationFailure.getMessage());
+                } catch (Exception journalFailure) {
+                    reservationFailure.addSuppressed(journalFailure);
+                }
+                plugin.getLogger().severe("Delivery item reservation failed; manual review required. transaction="
+                        + tx + " order=" + orderId + " seller=" + seller.getUniqueId());
+                throw new IllegalStateException("Item reservation was interrupted. Transaction " + tx
+                        + " needs administrator review; do not retry until it is checked.", reservationFailure);
+            }
             plugin.repository().setTransactionState(tx,"ITEMS_RESERVED","Removed "+quantity+" "+material+" from seller inventory.");
             plugin.repository().setTransactionState(tx,"PAYMENT_PENDING","Payout attempt about to be made; uncertain outcomes require manual review.");
             var payout=plugin.economy().depositPlayer(seller,amount);
