@@ -79,11 +79,15 @@ public final class MarketInventoryListener implements Listener {
             p.closeInventory();
             return;
         }
-        if (slot == 22) {
-            inputs.put(p.getUniqueId(), new InputState("deliver-quantity", holder.material, holder.orderId,
-                    0, 0, System.currentTimeMillis() + 60_000));
+        if(slot==10){openDelivery(p,holder.orderId,holder.material,holder.maxQuantity,Math.max(1,holder.quantity-1));return;}
+        if(slot==16){openDelivery(p,holder.orderId,holder.material,holder.maxQuantity,Math.min(holder.maxQuantity,holder.quantity+1));return;}
+        if(slot==22){
+            BuyOrder order=plugin.repository().find(holder.orderId);
+            if(order==null||order.status()!=OrderStatus.ACTIVE||holder.quantity>order.remainingQuantity()){p.sendMessage("Order changed. Reopen the marketplace and try again.");p.closeInventory();return;}
+            double total=order.unitPrice()*holder.quantity;
+            inputs.put(p.getUniqueId(),new InputState("deliver-confirm",holder.material,holder.orderId,holder.quantity,total,System.currentTimeMillis()+60_000));
             p.closeInventory();
-            p.sendMessage("Enter how many "+holder.material+" you want to deliver (maximum "+holder.maxQuantity+"), or type cancel. Keep the items in your inventory until delivery is confirmed.");
+            p.sendMessage("Deliver "+holder.quantity+" "+holder.material+" for $"+total+"? Type confirm or cancel. Keep the items in your inventory until confirmed.");
         }
     }
     @EventHandler public void onDrag(InventoryDragEvent e){InventoryHolder holder=e.getView().getTopInventory().getHolder();if(holder instanceof MarketHolder||holder instanceof DeliveryHolder||holder instanceof ManageHolder||holder instanceof HistoryHolder||holder instanceof CreateHolder)e.setCancelled(true);}
@@ -248,20 +252,29 @@ public final class MarketInventoryListener implements Listener {
             BuyOrder o=plugin.repository().find(id);
             if(o==null||o.status()!=OrderStatus.ACTIVE||o.expiresAt()<=System.currentTimeMillis()){p.sendMessage("That order is no longer available.");return;}
             if(o.ownerId().equals(p.getUniqueId())){p.sendMessage("You cannot fulfill your own order.");return;}
-            Inventory inv=Bukkit.createInventory(new DeliveryHolder(id,o.material(),o.remainingQuantity()),27,
-                    mm.deserialize("<dark_purple>Order #"+id+" Delivery</dark_purple>"));
-            ItemStack info=named(o.material(),"<light_purple>"+o.material().name().replace('_',' ')+"</light_purple>");
-            ItemMeta meta=info.getItemMeta();
-            meta.lore(List.of(mm.deserialize("<gray>Requested: <white>"+o.remainingQuantity()),
-                    mm.deserialize("<gray>Price each: <white>"+o.unitPrice()),
-                    mm.deserialize("<gray>Maximum payout: <white>"+o.remainingValue()),
-                    mm.deserialize("<yellow>Your items stay in your inventory until confirmed.")));
-            info.setItemMeta(meta);
-            inv.setItem(13,info);
-            inv.setItem(22,named(Material.LIME_DYE,"<green>Enter Delivery Quantity"));
-            inv.setItem(26,named(Material.RED_DYE,"<red>Close"));
-            p.openInventory(inv);
+            openDelivery(p,id,o.material(),o.remainingQuantity(),1);
         } catch(Exception ex){p.sendMessage("Could not load order.");}
+    }
+    private void openDelivery(Player p,long id,Material material,int maxQuantity,int quantity){
+        BuyOrder order=plugin.repository().find(id);
+        if(order==null||order.status()!=OrderStatus.ACTIVE){p.sendMessage("That order is no longer active.");return;}
+        int safeMax=Math.min(maxQuantity,order.remainingQuantity());
+        int safeQuantity=Math.max(1,Math.min(quantity,safeMax));
+        Inventory inv=Bukkit.createInventory(new DeliveryHolder(id,material,safeMax,safeQuantity),27,mm.deserialize("<dark_purple>Order #"+id+" Delivery</dark_purple>"));
+        ItemStack info=named(material,"<light_purple>"+material.name().replace('_',' ')+"</light_purple>");
+        ItemMeta meta=info.getItemMeta();
+        meta.lore(List.of(mm.deserialize("<gray>Requested: <white>"+order.remainingQuantity()),
+                mm.deserialize("<gray>Selected: <white>"+safeQuantity),
+                mm.deserialize("<gray>Price each: <white>"+order.unitPrice()),
+                mm.deserialize("<gray>Estimated payout: <white>"+(order.unitPrice()*safeQuantity)),
+                mm.deserialize("<yellow>Items are removed only when delivery begins.")));
+        info.setItemMeta(meta);inv.setItem(13,info);
+        inv.setItem(10,named(Material.REDSTONE,"<red>Decrease quantity"));
+        inv.setItem(11,named(Material.PAPER,"<yellow>Selected: "+safeQuantity));
+        inv.setItem(16,named(Material.LIME_DYE,"<green>Increase quantity"));
+        inv.setItem(22,named(Material.EMERALD,"<green>Continue"));
+        inv.setItem(26,named(Material.BARRIER,"<red>Cancel"));
+        p.openInventory(inv);
     }
     @EventHandler public void onChat(AsyncPlayerChatEvent e){Player p=e.getPlayer();InputState s=inputs.get(p.getUniqueId());if(s==null)return;e.setCancelled(true);String msg=e.getMessage().trim();Bukkit.getScheduler().runTask(plugin,()->process(p,s,msg));}
     private void process(Player p,InputState s,String msg){
@@ -289,5 +302,5 @@ public final class MarketInventoryListener implements Listener {
     private static final class CreateHolder implements InventoryHolder{private final String step;private final int page;private final Material material;private final int quantity;private final double price;private CreateHolder(String step,int page,Material material,int quantity,double price){this.step=step;this.page=page;this.material=material;this.quantity=quantity;this.price=price;}@Override public Inventory getInventory(){return null;}}
     private static final class HistoryHolder implements InventoryHolder{@Override public Inventory getInventory(){return null;}}
     private static final class ManageHolder implements InventoryHolder{private final UUID ownerId;private ManageHolder(UUID ownerId){this.ownerId=ownerId;}@Override public Inventory getInventory(){return null;}}
-    private static final class DeliveryHolder implements InventoryHolder{private final long orderId;private final Material material;private final int maxQuantity;private DeliveryHolder(long orderId,Material material,int maxQuantity){this.orderId=orderId;this.material=material;this.maxQuantity=maxQuantity;}@Override public Inventory getInventory(){return null;}}
+    private static final class DeliveryHolder implements InventoryHolder{private final long orderId;private final Material material;private final int maxQuantity;private final int quantity;private DeliveryHolder(long orderId,Material material,int maxQuantity,int quantity){this.orderId=orderId;this.material=material;this.maxQuantity=maxQuantity;this.quantity=quantity;}@Override public Inventory getInventory(){return null;}}
 }
