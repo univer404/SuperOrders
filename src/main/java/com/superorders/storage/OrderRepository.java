@@ -29,6 +29,17 @@ public final class OrderRepository implements AutoCloseable {
         }
         return id;
     }
+    public synchronized boolean claimTransactionState(String id, String expectedState, String newState, String details) throws SQLException {
+        try (PreparedStatement p = connection.prepareStatement(
+                "UPDATE order_transactions SET state=?,details=? WHERE transaction_id=? AND state=?")) {
+            p.setString(1, newState);
+            p.setString(2, details == null ? "" : details);
+            p.setString(3, id);
+            p.setString(4, expectedState);
+            return p.executeUpdate() == 1;
+        }
+    }
+
     public synchronized void setTransactionState(String id, String state, String details) throws SQLException {
         try(PreparedStatement p=connection.prepareStatement("UPDATE order_transactions SET state=?,details=? WHERE transaction_id=?")){p.setString(1,state);p.setString(2,details==null?"":details);p.setString(3,id);if(p.executeUpdate()!=1)throw new SQLException("Transaction record missing");}
     }
@@ -56,7 +67,7 @@ public final class OrderRepository implements AutoCloseable {
         return out;
     }
     public synchronized boolean hasUnresolvedDelivery(long orderId) throws SQLException {
-        try(PreparedStatement p=connection.prepareStatement("SELECT COUNT(*) FROM order_transactions WHERE order_id=? AND state IN ('DELIVERY_PREPARED','ITEMS_RESERVED','PAYMENT_PENDING','FAILED_REQUIRES_REVIEW')")){p.setLong(1,orderId);try(ResultSet r=p.executeQuery()){return r.next()&&r.getInt(1)>0;}}
+        try(PreparedStatement p=connection.prepareStatement("SELECT COUNT(*) FROM order_transactions WHERE order_id=? AND state IN ('DELIVERY_PREPARED','ITEMS_RESERVED','PAYMENT_PENDING','ITEM_RESTORE_PENDING','FAILED_REQUIRES_REVIEW')")){p.setLong(1,orderId);try(ResultSet r=p.executeQuery()){return r.next()&&r.getInt(1)>0;}}
     }
     public synchronized void finishDelivery(long orderId, int quantity, double amount, String transactionId) throws SQLException {
         boolean old=connection.getAutoCommit();connection.setAutoCommit(false);
