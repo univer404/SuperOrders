@@ -3,6 +3,7 @@ package com.superorders.storage;
 import com.superorders.model.BuyOrder;
 import com.superorders.model.OrderStatus;
 import com.superorders.model.TransactionRecord;
+import com.superorders.model.RecoveryObligation;
 import org.bukkit.Material;
 import java.io.File;
 import java.sql.*;
@@ -98,6 +99,49 @@ public final class OrderRepository implements AutoCloseable {
     public synchronized void markRefundObligation(String id, String state) throws SQLException {
         try(PreparedStatement p=connection.prepareStatement("UPDATE recovery_obligations SET state=? WHERE obligation_id=? AND state='PENDING'")) { p.setString(1,state);p.setString(2,id);p.executeUpdate(); }
     }
+    public synchronized List<RecoveryObligation> pendingObligations(int limit) throws SQLException {
+        List<RecoveryObligation> out = new ArrayList<>();
+        try (PreparedStatement p = connection.prepareStatement(
+                "SELECT * FROM recovery_obligations WHERE state IN ('PENDING','REVIEW','PROCESSING') ORDER BY created_at ASC LIMIT ?")) {
+            p.setInt(1, Math.max(1, Math.min(100, limit)));
+            try (ResultSet r = p.executeQuery()) {
+                while (r.next()) out.add(new RecoveryObligation(
+                        r.getString("obligation_id"), UUID.fromString(r.getString("player_uuid")),
+                        r.getDouble("amount"), r.getString("reason"), r.getString("state"), r.getLong("created_at")));
+            }
+        }
+        return out;
+    }
+
+    public synchronized RecoveryObligation findObligation(String id) throws SQLException {
+        try (PreparedStatement p = connection.prepareStatement("SELECT * FROM recovery_obligations WHERE obligation_id=?")) {
+            p.setString(1, id);
+            try (ResultSet r = p.executeQuery()) {
+                if (!r.next()) return null;
+                return new RecoveryObligation(r.getString("obligation_id"), UUID.fromString(r.getString("player_uuid")),
+                        r.getDouble("amount"), r.getString("reason"), r.getString("state"), r.getLong("created_at"));
+            }
+        }
+    }
+
+    public synchronized boolean claimRefundObligation(String id) throws SQLException {
+        try (PreparedStatement p = connection.prepareStatement(
+                "UPDATE recovery_obligations SET state='PROCESSING' WHERE obligation_id=? AND state IN ('PENDING','REVIEW')")) {
+            p.setString(1, id);
+            return p.executeUpdate() == 1;
+        }
+    }
+
+    public synchronized void finishRefundObligation(String id, String state) throws SQLException {
+        if (!List.of("PAID", "REVIEW").contains(state)) throw new IllegalArgumentException("Invalid refund state");
+        try (PreparedStatement p = connection.prepareStatement(
+                "UPDATE recovery_obligations SET state=? WHERE obligation_id=? AND state='PROCESSING'")) {
+            p.setString(1, state);
+            p.setString(2, id);
+            if (p.executeUpdate() != 1) throw new SQLException("Refund obligation is no longer being processed");
+        }
+    }
+
     public synchronized int pendingTransactionCount() throws SQLException {
         try(PreparedStatement p=connection.prepareStatement("SELECT COUNT(*) FROM order_transactions WHERE state IN ('ESCROW_WITHDRAW_PENDING','ITEMS_RESERVED','PAYMENT_PENDING','FAILED_REQUIRES_REVIEW')");ResultSet r=p.executeQuery()){return r.next()?r.getInt(1):0;}
     }
