@@ -41,6 +41,10 @@ public final class MarketInventoryListener implements Listener {
         var lore=item.getItemMeta().lore();if(lore==null)return;
         for(var line:lore){String plain=net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(line);if(plain.startsWith("Order #"))try{beginDelivery(p,Long.parseLong(plain.substring(7)));return;}catch(NumberFormatException ignored){}}
     }
+    @EventHandler public void onHistoryClick(InventoryClickEvent e) {
+        if (e.getView().getTopInventory().getHolder() instanceof HistoryHolder) e.setCancelled(true);
+    }
+
     @EventHandler public void onManageClick(InventoryClickEvent e) {
         if (!(e.getWhoClicked() instanceof Player p)
                 || !(e.getView().getTopInventory().getHolder() instanceof ManageHolder holder)) return;
@@ -82,7 +86,7 @@ public final class MarketInventoryListener implements Listener {
             p.sendMessage("Enter how many "+holder.material+" you want to deliver (maximum "+holder.maxQuantity+"), or type cancel. Keep the items in your inventory until delivery is confirmed.");
         }
     }
-    @EventHandler public void onDrag(InventoryDragEvent e){if(isMarket(e.getView().getTopInventory())||e.getView().getTopInventory().getHolder() instanceof DeliveryHolder)e.setCancelled(true);}
+    @EventHandler public void onDrag(InventoryDragEvent e){InventoryHolder holder=e.getView().getTopInventory().getHolder();if(holder instanceof MarketHolder||holder instanceof DeliveryHolder||holder instanceof ManageHolder||holder instanceof HistoryHolder)e.setCancelled(true);}
     private boolean isMarket(Inventory i){return i.getHolder() instanceof MarketHolder;}
     public void openMarket(Player p){ openMarket(p,0,"",MarketSort.NEWEST); }
     private void openMarket(Player p,int requestedPage){openMarket(p,requestedPage,"",MarketSort.NEWEST);}
