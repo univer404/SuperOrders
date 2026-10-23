@@ -4,6 +4,10 @@ marketplace:
   page-size: 45
   order-slots: []
   create-slot: 49
+  search-slot: 46
+  sort-slot: 47
+  mine-slot: 50
+  history-slot: 51
   previous-slot: 45
   next-slot: 53
   refresh-slot: 48
