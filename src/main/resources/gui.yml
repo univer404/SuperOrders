@@ -1,0 +1,27 @@
+marketplace:
+  title: "<dark_purple><bold>SuperOrders</bold></dark_purple>"
+  size: 54
+  page-size: 45
+  order-slots: []
+  create-slot: 49
+  previous-slot: 45
+  next-slot: 53
+  refresh-slot: 48
+  filler:
+    enabled: true
+    material: BLACK_STAINED_GLASS_PANE
+    name: " "
+  order:
+    name: "<light_purple>{item}</light_purple>"
+    lore:
+      - "<gray>Owner: <white>{owner}"
+      - "<gray>Remaining: <white>{remaining}"
+      - "<gray>Unit price: <white>{price}"
+      - "<gray>Remaining value: <white>{value}"
+      - "<yellow>Order #{id}"
+  create:
+    material: EMERALD
+    name: "<green>Create Order"
+  empty:
+    material: PAPER
+    name: "<gray>No active orders"
