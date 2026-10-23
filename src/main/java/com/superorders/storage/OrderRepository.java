@@ -51,7 +51,7 @@ public final class OrderRepository implements AutoCloseable {
     }
     public synchronized List<TransactionRecord> historyFor(UUID actor, int limit) throws SQLException {
         List<TransactionRecord> out=new ArrayList<>();
-        try(PreparedStatement p=connection.prepareStatement("SELECT * FROM order_transactions WHERE actor_uuid=? ORDER BY created_at DESC LIMIT ?")){p.setString(1,actor.toString());p.setInt(2,Math.max(1,Math.min(100,limit)));try(ResultSet r=p.executeQuery()){while(r.next())out.add(new TransactionRecord(r.getString("transaction_id"),r.getLong("order_id"),r.getString("actor_uuid"),r.getInt("quantity"),r.getDouble("amount"),r.getString("state"),r.getLong("created_at"),r.getString("details")));}}
+        try(PreparedStatement p=connection.prepareStatement("SELECT * FROM order_transactions WHERE actor_uuid=? OR order_id IN (SELECT id FROM orders WHERE owner_uuid=?) ORDER BY created_at DESC LIMIT ?")){p.setString(1,actor.toString());p.setString(2,actor.toString());p.setInt(3,Math.max(1,Math.min(100,limit)));try(ResultSet r=p.executeQuery()){while(r.next())out.add(new TransactionRecord(r.getString("transaction_id"),r.getLong("order_id"),r.getString("actor_uuid"),r.getInt("quantity"),r.getDouble("amount"),r.getString("state"),r.getLong("created_at"),r.getString("details")));}}
         return out;
     }
     public synchronized boolean hasUnresolvedDelivery(long orderId) throws SQLException {
