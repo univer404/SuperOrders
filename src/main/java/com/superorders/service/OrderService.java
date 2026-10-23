@@ -36,11 +36,10 @@ public final class OrderService {
         }
         long now = System.currentTimeMillis();
         long lifetime = plugin.getConfig().getLong("orders.expiration.default-lifetime-hours", 168) * 3_600_000L;
+        long orderId;
         try {
-            long orderId = plugin.repository().create(player.getUniqueId(), player.getName(), material, quantity, unitPrice, total, now,
+            orderId = plugin.repository().create(player.getUniqueId(), player.getName(), material, quantity, unitPrice, total, now,
                     plugin.getConfig().getBoolean("orders.expiration.enabled", true) ? now + lifetime : Long.MAX_VALUE);
-            plugin.repository().setTransactionState(transactionId, "ESCROW_RESERVED", "Created order #" + orderId);
-            return orderId;
         } catch (Exception dbFailure) {
             var refund = plugin.economy().depositPlayer(player, total);
             if (refund.transactionSuccess()) plugin.repository().setTransactionState(transactionId, "COMPENSATED", "Order persistence failed; escrow returned.");
@@ -52,6 +51,9 @@ public final class OrderService {
             }
             throw dbFailure;
         }
+        try { plugin.repository().setTransactionState(transactionId, "ESCROW_RESERVED", "Created order #" + orderId); }
+        catch (Exception journalFailure) { plugin.getLogger().severe("Order #" + orderId + " was created and escrow withdrawn, but its journal update failed. Requires review: " + transactionId); }
+        return orderId;
     }
 
     public boolean cancel(Player actor, long orderId, boolean admin) throws Exception {
