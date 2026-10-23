@@ -48,6 +48,21 @@ public final class OrderRepository implements AutoCloseable {
     public synchronized int countActive(UUID owner) throws SQLException {
         try(PreparedStatement p=connection.prepareStatement("SELECT COUNT(*) FROM orders WHERE owner_uuid=? AND status=?")) { p.setString(1,owner.toString()); p.setString(2,OrderStatus.ACTIVE.name()); try(ResultSet r=p.executeQuery()){return r.next()?r.getInt(1):0;} }
     }
+    public synchronized boolean hasUnresolvedDelivery(long orderId) throws SQLException {
+        try(PreparedStatement p=connection.prepareStatement("SELECT COUNT(*) FROM order_transactions WHERE order_id=? AND state IN ('DELIVERY_PREPARED','ITEMS_RESERVED','PAYMENT_PENDING','FAILED_REQUIRES_REVIEW')")){p.setLong(1,orderId);try(ResultSet r=p.executeQuery()){return r.next()&&r.getInt(1)>0;}}
+    }
+    public synchronized void finishDelivery(long orderId, int quantity, double amount, String transactionId) throws SQLException {
+        boolean old=connection.getAutoCommit();connection.setAutoCommit(false);
+        try {
+            int remaining;
+            try(PreparedStatement p=connection.prepareStatement("SELECT remaining_quantity FROM orders WHERE id=? AND status=? AND remaining_quantity>=? AND remaining_escrow>=?")){p.setLong(1,orderId);p.setString(2,OrderStatus.ACTIVE.name());p.setInt(3,quantity);p.setDouble(4,amount);try(ResultSet r=p.executeQuery()){if(!r.next())throw new SQLException("Order is no longer fulfillable");remaining=r.getInt(1)-quantity;}}
+            try(PreparedStatement p=connection.prepareStatement("UPDATE orders SET remaining_quantity=?,remaining_escrow=?,status=? WHERE id=? AND status=? AND remaining_quantity>=? AND remaining_escrow>=?")) {
+                p.setInt(1,remaining);p.setDouble(2,Math.max(0.0,find(orderId).remainingEscrow()-amount));p.setString(3,remaining==0?OrderStatus.COMPLETED.name():OrderStatus.ACTIVE.name());p.setLong(4,orderId);p.setString(5,OrderStatus.ACTIVE.name());p.setInt(6,quantity);p.setDouble(7,amount);if(p.executeUpdate()!=1)throw new SQLException("Concurrent order update rejected");
+            }
+            try(PreparedStatement p=connection.prepareStatement("UPDATE order_transactions SET state=?,details=? WHERE transaction_id=? AND state=?")){p.setString(1,"COMPLETED");p.setString(2,"Delivery finalized");p.setString(3,transactionId);p.setString(4,"PAYMENT_PENDING");if(p.executeUpdate()!=1)throw new SQLException("Delivery journal state mismatch");}
+            connection.commit();
+        } catch(SQLException ex){connection.rollback();throw ex;} finally{connection.setAutoCommit(old);}
+    }
     public synchronized List<BuyOrder> ordersFor(UUID owner) throws SQLException {
         List<BuyOrder> out=new ArrayList<>();
         try(PreparedStatement p=connection.prepareStatement("SELECT * FROM orders WHERE owner_uuid=? ORDER BY created_at DESC")){p.setString(1,owner.toString());try(ResultSet r=p.executeQuery()){while(r.next())out.add(map(r));}}
