@@ -22,6 +22,7 @@ SuperOrders is a Java plugin project for a player-driven Minecraft buy-order mar
 - `/orders admin cancel <id>` — administrator cancellation.
 - `/orders admin recover` — list open refund obligations and unresolved transaction details.
 - `/orders admin refund <obligation-id>` — explicitly attempt a recorded refund obligation after checking the economy provider's transaction history.
+- `/orders admin escrow-refund <transaction-id>` — manually compensate an unresolved order-creation withdrawal only after confirming the original withdrawal succeeded.
 - `/orders admin resolve <transaction-id> paid` — finalize a `PAYMENT_PENDING` delivery after verifying that the seller was paid; it does not send another payout.
 - `/orders admin resolve <transaction-id> restore` — restore reserved items to an online seller for an `ITEMS_RESERVED` transaction; the seller must be online.
 - `/orders admin debug` — diagnostics.
@@ -30,10 +31,18 @@ SuperOrders is a Java plugin project for a player-driven Minecraft buy-order mar
 Player permissions are declared in `src/main/resources/plugin.yml`. Admin permissions default to operators. Grant only the specific admin permission needed.
 
 ## Transaction safety and current limitations
-The plugin writes transaction journal entries before escrow withdrawal and delivery payout attempts. Delivery transactions are serialized per order; unresolved payout states lock an order to prevent blind duplicate payouts. Cancellation and expiration record refund obligations durably before attempting the refund. Vault and SQLite do not share an atomic transaction, so ambiguous outcomes require manual review and must not be blindly retried.
+The plugin writes transaction journal entries before escrow withdrawal and delivery payout attempts. Delivery transactions are serialized per order; unresolved delivery states lock the order to prevent blind duplicate payouts. Cancellation and expiration now claim their durable refund obligation as `PROCESSING` **before** calling Vault. A confirmed payout becomes `PAID`; a definite rejection becomes `REVIEW`; an exception or ambiguous provider outcome stays `PROCESSING` so the same refund cannot be casually retried. Check the economy provider's history before any manual action.
 
-**This branch is still under development and is not production-ready.** Delivery accepts plain matching item stacks only. The GUI leaves items in the seller's inventory until the amount is confirmed. Refund obligations and interrupted transactions are recorded for admin review, and the optional PlaceholderAPI expansion provides basic marketplace/player statistics. Because Vault and SQLite cannot commit atomically, a crash or ambiguous economy-provider response can still require manual reconciliation. Never retry an obligation in `PROCESSING` or finalize a `PAYMENT_PENDING` transaction until the economy provider's history has been checked. Item restoration is deliberately restricted to `ITEMS_RESERVED` transactions; ambiguous states require investigation. Broad automated integration tests, complete crash recovery across Bukkit inventory and Vault operations, and staging-server verification remain unfinished. Do not use it with real player balances until the full lifecycle has been compiled and tested on a staging server.
+Recovery guidance:
+- `DELIVERY_PREPARED`: inspect the seller inventory and economy history. The crash may have happened before, during, or after item reservation; do not restore or pay based on this state alone.
+- `ITEMS_RESERVED`: items were recorded as removed, but no payout should be assumed. Verify inventory and provider history before using `/orders admin resolve <transaction-id> restore`.
+- `PAYMENT_PENDING`: the payout may or may not have succeeded. Verify the provider history first. Use `/orders admin resolve <transaction-id> paid` only if the seller was paid; it finalizes escrow without issuing another payout.
+- `PROCESSING` refund obligation: payout outcome may be ambiguous. Do not rerun it until provider history confirms whether payment occurred.
+- `ESCROW_WITHDRAW_PENDING` or `ESCROW_REFUND_PENDING`: inspect balance/provider history and order records before taking action. Never issue compensation unless the original withdrawal is confirmed.
+- `FAILED_REQUIRES_REVIEW`: resolve the original failure cause and confirm the economy transaction history before attempting compensation.
 
+Vault, Bukkit inventory changes, and SQLite cannot participate in one atomic transaction. Therefore no plugin can safely infer the outcome of every crash solely from its journal. Ambiguous states require manual reconciliation and may require the player to remain online for item restoration. This branch is still under development; automated tests cover repository state transitions but do not replace staging-server failure-injection tests. Back up the SQLite database before updating and test with non-production balances first.
+ 
 ## PlaceholderAPI
 When PlaceholderAPI is installed, SuperOrders registers the `superorders` expansion:
 - `%superorders_active_orders%`
