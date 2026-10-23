@@ -1,6 +1,7 @@
 package com.superorders;
 
 import com.superorders.command.OrdersCommand;
+import com.superorders.gui.MarketInventoryListener;
 import com.superorders.storage.OrderRepository;
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.plugin.RegisteredServiceProvider;
@@ -16,6 +17,7 @@ public final class SuperOrders extends JavaPlugin {
         if (!setupEconomy()) { getLogger().severe("Vault-compatible economy provider not found. Disabling SuperOrders."); getServer().getPluginManager().disablePlugin(this); return; }
         try { if (!getDataFolder().exists() && !getDataFolder().mkdirs()) throw new SQLException("Cannot create plugin data folder"); repository = new OrderRepository(new File(getDataFolder(),getConfig().getString("database.file","orders.db"))); }
         catch(SQLException e){getLogger().severe("SQLite initialization failed: "+e.getMessage());getServer().getPluginManager().disablePlugin(this);return;}
+        getServer().getPluginManager().registerEvents(new MarketInventoryListener(), this);
         OrdersCommand handler = new OrdersCommand(this);
         getCommand("orders").setExecutor(handler); getCommand("orders").setTabCompleter(handler);
         getLogger().info("SuperOrders foundation loaded; order creation and delivery transactions are not yet production-ready.");
