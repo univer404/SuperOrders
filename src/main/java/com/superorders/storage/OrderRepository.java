@@ -38,6 +38,11 @@ public final class OrderRepository implements AutoCloseable {
     public synchronized int countActive(UUID owner) throws SQLException {
         try(PreparedStatement p=connection.prepareStatement("SELECT COUNT(*) FROM orders WHERE owner_uuid=? AND status=?")) { p.setString(1,owner.toString()); p.setString(2,OrderStatus.ACTIVE.name()); try(ResultSet r=p.executeQuery()){return r.next()?r.getInt(1):0;} }
     }
+    public synchronized List<BuyOrder> ordersFor(UUID owner) throws SQLException {
+        List<BuyOrder> out=new ArrayList<>();
+        try(PreparedStatement p=connection.prepareStatement("SELECT * FROM orders WHERE owner_uuid=? ORDER BY created_at DESC")){p.setString(1,owner.toString());try(ResultSet r=p.executeQuery()){while(r.next())out.add(map(r));}}
+        return out;
+    }
     public synchronized BuyOrder find(long id) throws SQLException {
         try(PreparedStatement p=connection.prepareStatement("SELECT * FROM orders WHERE id=?")){p.setLong(1,id);try(ResultSet r=p.executeQuery()){return r.next()?map(r):null;}}
     }
