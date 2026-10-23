@@ -48,14 +48,12 @@ public final class OrderService {
             BuyOrder order = plugin.repository().find(orderId);
             if (order == null || order.status() != OrderStatus.ACTIVE) throw new IllegalArgumentException("That order is not active.");
             if (!admin && !order.ownerId().equals(actor.getUniqueId())) throw new IllegalArgumentException("You do not own that order.");
-            plugin.repository().setStatus(orderId, OrderStatus.CANCELLED);
             double refundAmount = order.remainingEscrow();
+            String obligation = plugin.repository().cancelAndRecordRefund(orderId, OrderStatus.CANCELLED, order.ownerId(), refundAmount, "Order cancellation #" + orderId);
             if (refundAmount > 0) {
-                var response = plugin.economy().depositPlayer(order.ownerId().toString().equals(actor.getUniqueId().toString()) ? actor : plugin.getServer().getOfflinePlayer(order.ownerId()), refundAmount);
-                if (!response.transactionSuccess()) {
-                    plugin.repository().recordRefundObligation(order.ownerId(), refundAmount, "Order cancellation #" + orderId);
-                    actor.sendMessage("Refund could not be delivered immediately; it has been recorded for administrator recovery.");
-                }
+                var response = plugin.economy().depositPlayer(plugin.getServer().getOfflinePlayer(order.ownerId()), refundAmount);
+                if (response.transactionSuccess()) plugin.repository().markRefundObligation(obligation, "PAID");
+                else actor.sendMessage("Refund could not be confirmed. A durable refund obligation was recorded for administrator review; do not retry blindly.");
             }
             return true;
         } finally { lock.unlock(); }
@@ -69,10 +67,10 @@ public final class OrderService {
                 try {
                     BuyOrder current = plugin.repository().find(order.id());
                     if (current == null || current.status() != OrderStatus.ACTIVE || current.expiresAt() > System.currentTimeMillis()) continue;
-                    plugin.repository().setStatus(current.id(), OrderStatus.EXPIRED);
+                    String obligation = plugin.repository().cancelAndRecordRefund(current.id(), OrderStatus.EXPIRED, current.ownerId(), current.remainingEscrow(), "Expired order #" + current.id());
                     if (current.remainingEscrow() > 0) {
                         var response = plugin.economy().depositPlayer(plugin.getServer().getOfflinePlayer(current.ownerId()), current.remainingEscrow());
-                        if (!response.transactionSuccess()) plugin.repository().recordRefundObligation(current.ownerId(), current.remainingEscrow(), "Expired order #" + current.id());
+                        if (response.transactionSuccess()) plugin.repository().markRefundObligation(obligation, "PAID");
                     }
                     Player owner = plugin.getServer().getPlayer(current.ownerId());
                     if (owner != null) owner.sendMessage("Your SuperOrders order #" + current.id() + " expired. Any refund that could not be processed was recorded for recovery.");
