@@ -53,8 +53,8 @@ public final class OrderRepository implements AutoCloseable {
     }
     public synchronized List<BuyOrder> activeOrders() throws SQLException {
         List<BuyOrder> out = new ArrayList<>();
-        try (PreparedStatement p=connection.prepareStatement("SELECT * FROM orders WHERE status=? AND remaining_quantity>0 ORDER BY created_at DESC")) {
-            p.setString(1,OrderStatus.ACTIVE.name()); try(ResultSet r=p.executeQuery()) { while(r.next()) out.add(map(r)); }
+        try (PreparedStatement p=connection.prepareStatement("SELECT * FROM orders WHERE status=? AND remaining_quantity>0 AND expires_at>? ORDER BY created_at DESC")) {
+            p.setString(1,OrderStatus.ACTIVE.name()); p.setLong(2,System.currentTimeMillis()); try(ResultSet r=p.executeQuery()) { while(r.next()) out.add(map(r)); }
         } return out;
     }
     public synchronized List<BuyOrder> expiredActiveOrders(long now) throws SQLException { List<BuyOrder> out=new ArrayList<>(); try(PreparedStatement p=connection.prepareStatement("SELECT * FROM orders WHERE status=? AND expires_at<=?")){p.setString(1,OrderStatus.ACTIVE.name());p.setLong(2,now);try(ResultSet r=p.executeQuery()){while(r.next())out.add(map(r));}}return out; }
