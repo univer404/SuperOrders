@@ -86,7 +86,7 @@ public final class MarketInventoryListener implements Listener {
             p.sendMessage("Enter how many "+holder.material+" you want to deliver (maximum "+holder.maxQuantity+"), or type cancel. Keep the items in your inventory until delivery is confirmed.");
         }
     }
-    @EventHandler public void onDrag(InventoryDragEvent e){InventoryHolder holder=e.getView().getTopInventory().getHolder();if(holder instanceof MarketHolder||holder instanceof DeliveryHolder||holder instanceof ManageHolder||holder instanceof HistoryHolder)e.setCancelled(true);}
+    @EventHandler public void onDrag(InventoryDragEvent e){InventoryHolder holder=e.getView().getTopInventory().getHolder();if(holder instanceof MarketHolder||holder instanceof DeliveryHolder||holder instanceof ManageHolder||holder instanceof HistoryHolder||holder instanceof CreateHolder)e.setCancelled(true);}
     private boolean isMarket(Inventory i){return i.getHolder() instanceof MarketHolder;}
     public void openMarket(Player p){ openMarket(p,0,"",MarketSort.NEWEST); }
     private void openMarket(Player p,int requestedPage){openMarket(p,requestedPage,"",MarketSort.NEWEST);}
@@ -191,7 +191,58 @@ public final class MarketInventoryListener implements Listener {
         } catch(Exception ex){plugin.getLogger().warning("Could not load player orders: "+ex.getMessage());p.sendMessage("Could not load your orders.");}
     }
 
-    public void beginCreate(Player p){inputs.put(p.getUniqueId(),new InputState("material",null,0,0,0,System.currentTimeMillis()+60_000));p.sendMessage("Type the item material (e.g. DIAMOND), or cancel:");}
+    public void beginCreate(Player p){ openMaterialPicker(p,0); }
+    private void openMaterialPicker(Player p,int requestedPage){
+        List<Material> materials=Arrays.stream(Material.values()).filter(Material::isItem).filter(m->!m.isAir()).sorted(Comparator.comparing(Material::name)).toList();
+        int perPage=45, maxPage=Math.max(0,(materials.size()-1)/perPage), page=Math.max(0,Math.min(requestedPage,maxPage));
+        Inventory inv=Bukkit.createInventory(new CreateHolder("picker",page,null,16,1.0),54,mm.deserialize("<dark_purple>Select Order Item</dark_purple>"));
+        int start=page*perPage,end=Math.min(materials.size(),start+perPage);
+        for(int i=start;i<end;i++){Material material=materials.get(i);ItemStack icon=new ItemStack(material);ItemMeta meta=icon.getItemMeta();meta.displayName(mm.deserialize("<light_purple>"+material.name().replace('_',' ')+"</light_purple>"));meta.lore(List.of(mm.deserialize("<gray>Click to select this item")));icon.setItemMeta(meta);inv.setItem(i-start,icon);}
+        if(page>0)inv.setItem(45,named(Material.ARROW,"<yellow>Previous Items"));
+        inv.setItem(49,named(Material.BARRIER,"<red>Cancel"));
+        if(page<maxPage)inv.setItem(53,named(Material.ARROW,"<yellow>Next Items"));
+        p.openInventory(inv);
+    }
+    private void openCreateSettings(Player p,Material material,int quantity,double price){
+        Inventory inv=Bukkit.createInventory(new CreateHolder("settings",0,material,quantity,price),27,mm.deserialize("<dark_purple>Configure Buy Order</dark_purple>"));
+        inv.setItem(4,named(material,"<light_purple>"+material.name().replace('_',' ')+"</light_purple>"));
+        inv.setItem(10,named(Material.REDSTONE,"<red>Decrease Quantity"));
+        inv.setItem(11,named(Material.LIME_DYE,"<green>Increase Quantity"));
+        inv.setItem(13,named(Material.PAPER,"<yellow>Quantity: "+quantity+"<gray> (click +/-)"));
+        inv.setItem(15,named(Material.GOLD_NUGGET,"<red>Lower Unit Price"));
+        inv.setItem(16,named(Material.GOLD_INGOT,"<green>Raise Unit Price"));
+        inv.setItem(22,named(Material.EMERALD,"<green>Confirm Order"));
+        inv.setItem(26,named(Material.BARRIER,"<red>Cancel"));
+        ItemStack priceInfo=named(Material.GOLD_INGOT,"<yellow>Unit price: "+price);
+        ItemMeta meta=priceInfo.getItemMeta();meta.lore(List.of(mm.deserialize("<gray>Total escrow: "+(quantity*price)),mm.deserialize("<gray>Use +/- to adjust quantity and price.")));priceInfo.setItemMeta(meta);inv.setItem(14,priceInfo);
+        p.openInventory(inv);
+    }
+    @EventHandler public void onCreateClick(InventoryClickEvent e){
+        if(!(e.getWhoClicked() instanceof Player p)||!(e.getView().getTopInventory().getHolder() instanceof CreateHolder holder))return;
+        e.setCancelled(true);if(e.getClickedInventory()!=e.getView().getTopInventory())return;
+        int slot=e.getRawSlot();
+        if(holder.step.equals("picker")){
+            if(slot==49){p.closeInventory();return;}
+            if(slot==45&&holder.page>0){openMaterialPicker(p,holder.page-1);return;}
+            if(slot==53){openMaterialPicker(p,holder.page+1);return;}
+            ItemStack selected=e.getCurrentItem();if(selected==null||selected.getType().isAir()||!selected.getType().isItem())return;
+            openCreateSettings(p,selected.getType(),16,1.0);return;
+        }
+        if(slot==26){p.closeInventory();p.sendMessage("Order creation cancelled.");return;}
+        int quantity=holder.quantity;double price=holder.price;
+        int max=plugin.getConfig().getInt("orders.max-quantity",23040);
+        double step=plugin.getConfig().getDouble("orders.gui-price-step",1.0);
+        if(slot==10)quantity=Math.max(1,quantity-1);
+        else if(slot==11)quantity=Math.min(max,quantity+1);
+        else if(slot==15)price=Math.max(plugin.getConfig().getDouble("orders.min-unit-price",0.01),Math.round((price-step)*100.0)/100.0);
+        else if(slot==16)price=Math.min(plugin.getConfig().getDouble("orders.max-unit-price",1_000_000_000.0),Math.round((price+step)*100.0)/100.0);
+        else if(slot==22){
+            try{long id=orders.create(p,holder.material,holder.quantity,holder.price);p.closeInventory();p.sendMessage("Order #"+id+" created; escrow reserved.");}
+            catch(Exception ex){p.sendMessage("SuperOrders: "+(ex.getMessage()==null?"Could not create order.":ex.getMessage()));}
+            return;
+        }else return;
+        openCreateSettings(p,holder.material,quantity,price);
+    }
     private void beginDelivery(Player p,long id){
         try {
             BuyOrder o=plugin.repository().find(id);
@@ -235,7 +286,7 @@ public final class MarketInventoryListener implements Listener {
     }
     private record InputState(String step,Material material,long orderId,int quantity,double price,long deadline){}
     private static final class MarketHolder implements InventoryHolder{private final int page;private final String query;private final MarketSort sort;private MarketHolder(int page,String query,MarketSort sort){this.page=page;this.query=query;this.sort=sort;}@Override public Inventory getInventory(){return null;}}
-    private static final class HistoryHolder implements InventoryHolder{@Override public Inventory getInventory(){return null;}}
+    private static final class CreateHolder implements InventoryHolder{private final String step;private final int page;private final Material material;private final int quantity;private final double price;private CreateHolder(String step,int page,Material material,int quantity,double price){this.step=step;this.page=page;this.material=material;this.quantity=quantity;this.price=price;}@Override public Inventory getInventory(){return null;}}\n    private static final class HistoryHolder implements InventoryHolder{@Override public Inventory getInventory(){return null;}}
     private static final class ManageHolder implements InventoryHolder{private final UUID ownerId;private ManageHolder(UUID ownerId){this.ownerId=ownerId;}@Override public Inventory getInventory(){return null;}}
     private static final class DeliveryHolder implements InventoryHolder{private final long orderId;private final Material material;private final int maxQuantity;private DeliveryHolder(long orderId,Material material,int maxQuantity){this.orderId=orderId;this.material=material;this.maxQuantity=maxQuantity;}@Override public Inventory getInventory(){return null;}}
 }
