@@ -25,6 +25,7 @@ public final class SuperOrders extends JavaPlugin {
         getServer().getPluginManager().registerEvents(marketListener, this);
         OrdersCommand handler = new OrdersCommand(this);
         getCommand("orders").setExecutor(handler); getCommand("orders").setTabCompleter(handler);
+        getServer().getScheduler().runTaskTimer(this, () -> orderService.expireDueOrders(), 20L, 1200L);
         getLogger().info("SuperOrders foundation loaded; order creation and delivery transactions are not yet production-ready.");
     }
     private boolean setupEconomy(){if(getServer().getPluginManager().getPlugin("Vault")==null)return false;RegisteredServiceProvider<Economy> p=getServer().getServicesManager().getRegistration(Economy.class);if(p==null)return false;economy=p.getProvider();return economy!=null;}
