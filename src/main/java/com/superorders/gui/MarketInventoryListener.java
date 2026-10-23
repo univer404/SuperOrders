@@ -27,7 +27,7 @@ public final class MarketInventoryListener implements Listener {
     @EventHandler public void onClick(InventoryClickEvent e){
         if(!(e.getWhoClicked() instanceof Player p)||!isMarket(e.getView().getTopInventory()))return;
         e.setCancelled(true); if(e.getClickedInventory()!=e.getView().getTopInventory())return;
-        int slot=e.getRawSlot(); if(slot==e.getView().getTopInventory().getSize()-5){p.closeInventory();beginCreate(p);return;}
+        int slot=e.getRawSlot(); if(slot==e.getView().getTopInventory().getSize()-5){e.setCancelled(true);if(!p.hasPermission("superorders.create")){p.sendMessage("You do not have permission to create orders.");return;}p.closeInventory();beginCreate(p);return;}
         ItemStack item=e.getCurrentItem();if(item==null||item.getType().isAir()||!item.hasItemMeta())return;
         var lore=item.getItemMeta().lore();if(lore==null)return;
         for(var line:lore){String plain=net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(line);if(plain.startsWith("Order #"))try{beginDelivery(p,Long.parseLong(plain.substring(7)));return;}catch(NumberFormatException ignored){}}
