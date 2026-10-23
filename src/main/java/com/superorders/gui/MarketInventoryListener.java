@@ -47,7 +47,7 @@ public final class MarketInventoryListener implements Listener {
         for(int i=0;i<18&&left>0;i++){ItemStack it=top.getItem(i);if(it==null||it.getType().isAir()){int put=Math.min(left,clicked.getMaxStackSize());top.setItem(i,new ItemStack(holder.material,put));left-=put;}else if(it.isSimilar(template)&&it.getAmount()<it.getMaxStackSize()){int put=Math.min(left,it.getMaxStackSize()-it.getAmount());it.setAmount(it.getAmount()+put);left-=put;}}
         int accepted=wanted-left;if(accepted>0){int remaining=clicked.getAmount()-accepted;if(remaining<=0)p.getInventory().setItem(e.getSlot(),null);else clicked.setAmount(remaining);}
     }
-    @EventHandler public void onDrag(InventoryDragEvent e){if(isMarket(e.getView().getTopInventory()))e.setCancelled(true);}
+    @EventHandler public void onDrag(InventoryDragEvent e){if(isMarket(e.getView().getTopInventory())||e.getView().getTopInventory().getHolder() instanceof DeliveryHolder)e.setCancelled(true);}
     private boolean isMarket(Inventory i){return i.getHolder() instanceof MarketHolder;}
     public void openMarket(Player p){
         try{List<BuyOrder> list=plugin.repository().activeOrders();int size=Math.max(27,Math.min(54,plugin.getConfig().getInt("marketplace.size",54)));size=((size+8)/9)*9;
