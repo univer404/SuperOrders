@@ -49,6 +49,22 @@ class OrderRepositoryRecoveryTest {
     }
 
     @Test
+    void interruptedReservationIsVisibleForAdministratorRecovery() throws Exception {
+        try (OrderRepository repository = new OrderRepository(tempDatabase())) {
+            String id = repository.recordTransaction(UUID.randomUUID(), 123L, 8, 16.0,
+                    "DELIVERY_PREPARED", "reservation started");
+            repository.setTransactionState(id, "FAILED_REQUIRES_REVIEW",
+                    "Inventory reservation may be partial");
+
+            assertEquals(1, repository.pendingTransactionCount());
+            TransactionRecord transaction = repository.pendingTransactions(10).get(0);
+            assertEquals(id, transaction.transactionId());
+            assertEquals("FAILED_REQUIRES_REVIEW", transaction.state());
+            assertTrue(transaction.details().contains("partial"));
+        }
+    }
+
+    @Test
     void refundObligationCannotBeClaimedTwice() throws Exception {
         try (OrderRepository repository = new OrderRepository(tempDatabase())) {
             UUID player = UUID.randomUUID();
