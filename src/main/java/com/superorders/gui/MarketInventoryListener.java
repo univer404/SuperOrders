@@ -114,6 +114,30 @@ public final class MarketInventoryListener implements Listener {
             p.openInventory(inv);
         } catch(Exception ex){plugin.getLogger().severe("Marketplace query failed: "+ex.getMessage());p.sendMessage("Marketplace could not be loaded.");}
     }
+    public void openHistory(Player p) {
+        try {
+            var records=plugin.repository().historyFor(p.getUniqueId(),45);
+            Inventory inv=Bukkit.createInventory(new HistoryHolder(),54,mm.deserialize("<dark_purple>SuperOrders History</dark_purple>"));
+            int slot=0;
+            for(var record:records) {
+                ItemStack icon=new ItemStack(Material.PAPER);
+                ItemMeta meta=icon.getItemMeta();
+                meta.displayName(mm.deserialize("<light_purple>"+record.state()+"</light_purple>"));
+                meta.lore(List.of(mm.deserialize("<gray>Order: <white>#"+record.orderId()),
+                        mm.deserialize("<gray>Quantity: <white>"+record.quantity()),
+                        mm.deserialize("<gray>Amount: <white>"+record.amount()),
+                        mm.deserialize("<gray>Actor: <white>"+record.actorUuid()),
+                        mm.deserialize("<gray>Time: <white>"+java.time.Instant.ofEpochMilli(record.createdAt())),
+                        mm.deserialize("<dark_gray>"+record.transactionId()),
+                        mm.deserialize("<gray>"+record.details())));
+                icon.setItemMeta(meta);
+                inv.setItem(slot++,icon);
+            }
+            if(records.isEmpty())inv.setItem(22,named(Material.PAPER,"<gray>No transactions recorded"));
+            p.openInventory(inv);
+        } catch(Exception ex){plugin.getLogger().warning("Could not load transaction history: "+ex.getMessage());p.sendMessage("Could not load transaction history.");}
+    }
+
     public void openMine(Player p) {
         try {
             List<BuyOrder> list=plugin.repository().ordersFor(p.getUniqueId());
@@ -177,6 +201,7 @@ public final class MarketInventoryListener implements Listener {
     private ItemStack named(Material material,String title){ItemStack i=new ItemStack(material);ItemMeta m=i.getItemMeta();m.displayName(mm.deserialize(title));i.setItemMeta(m);return i;}
     private record InputState(String step,Material material,long orderId,int quantity,double price,long deadline){}
     private static final class MarketHolder implements InventoryHolder{private final int page;private MarketHolder(int page){this.page=page;}@Override public Inventory getInventory(){return null;}}
+    private static final class HistoryHolder implements InventoryHolder{@Override public Inventory getInventory(){return null;}}
     private static final class ManageHolder implements InventoryHolder{private final UUID ownerId;private ManageHolder(UUID ownerId){this.ownerId=ownerId;}@Override public Inventory getInventory(){return null;}}
     private static final class DeliveryHolder implements InventoryHolder{private final long orderId;private final Material material;private final int maxQuantity;private DeliveryHolder(long orderId,Material material,int maxQuantity){this.orderId=orderId;this.material=material;this.maxQuantity=maxQuantity;}@Override public Inventory getInventory(){return null;}}
 }
