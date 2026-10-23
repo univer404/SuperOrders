@@ -27,6 +27,18 @@ public final class SuperOrders extends JavaPlugin {
         if (!setupEconomy()) { getLogger().severe("Vault-compatible economy provider not found. Disabling SuperOrders."); getServer().getPluginManager().disablePlugin(this); return; }
         try { if (!getDataFolder().exists() && !getDataFolder().mkdirs()) throw new SQLException("Cannot create plugin data folder"); repository = new OrderRepository(new File(getDataFolder(),getConfig().getString("database.file","orders.db"))); }
         catch(SQLException e){getLogger().severe("SQLite initialization failed: "+e.getMessage());getServer().getPluginManager().disablePlugin(this);return;}
+        if (getConfig().getBoolean("transactions.recovery-on-startup", true)) {
+            try {
+                int pendingRefunds = repository.pendingRefundCount();
+                int pendingTransactions = repository.pendingTransactionCount();
+                if (pendingRefunds > 0 || pendingTransactions > 0) {
+                    getLogger().warning("Recovery review required: "+pendingRefunds+" refund obligations and "
+                            +pendingTransactions+" unresolved transactions. Use /orders admin recover; no payouts are retried automatically.");
+                }
+            } catch (SQLException e) {
+                getLogger().severe("Could not inspect recovery journal on startup: "+e.getMessage());
+            }
+        }
         orderService = new OrderService(this);
         deliveryService = new DeliveryService(this);
         marketListener = new MarketInventoryListener(this, orderService);
