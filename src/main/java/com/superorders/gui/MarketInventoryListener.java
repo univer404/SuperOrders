@@ -30,8 +30,12 @@ public final class MarketInventoryListener implements Listener {
         int slot=e.getRawSlot();
         MarketHolder holder=(MarketHolder)e.getView().getTopInventory().getHolder();
         int size=e.getView().getTopInventory().getSize();
-        if(slot==size-9){ if(holder.page>0)openMarket(p,holder.page-1); return; }
-        if(slot==size-1){ openMarket(p,holder.page+1); return; }
+        if(slot==size-9){ if(holder.page>0)openMarket(p,holder.page-1,holder.query,holder.sort); return; }
+        if(slot==size-1){ openMarket(p,holder.page+1,holder.query,holder.sort); return; }
+        if(slot==size-8){inputs.put(p.getUniqueId(),new InputState("market-search",null,holder.page,0,holder.sort.ordinal(),System.currentTimeMillis()+60_000));p.closeInventory();p.sendMessage("Search by item material, owner name, or order ID. Type a search term, or type cancel to stop.");return;}
+        if(slot==size-7){openMarket(p,0,holder.query,MarketSort.values()[(holder.sort.ordinal()+1)%MarketSort.values().length]);return;}
+        if(slot==size-4){if(p.hasPermission("superorders.mine"))openMine(p);else msgNoPermission(p);return;}
+        if(slot==size-3){if(p.hasPermission("superorders.history"))openHistory(p);else msgNoPermission(p);return;}
         if(slot==size-5){e.setCancelled(true);if(!p.hasPermission("superorders.create")){p.sendMessage("You do not have permission to create orders.");return;}p.closeInventory();beginCreate(p);return;}
         ItemStack item=e.getCurrentItem();if(item==null||item.getType().isAir()||!item.hasItemMeta())return;
         var lore=item.getItemMeta().lore();if(lore==null)return;
@@ -80,16 +84,26 @@ public final class MarketInventoryListener implements Listener {
     }
     @EventHandler public void onDrag(InventoryDragEvent e){if(isMarket(e.getView().getTopInventory())||e.getView().getTopInventory().getHolder() instanceof DeliveryHolder)e.setCancelled(true);}
     private boolean isMarket(Inventory i){return i.getHolder() instanceof MarketHolder;}
-    public void openMarket(Player p){ openMarket(p,0); }
-    private void openMarket(Player p,int requestedPage){
+    public void openMarket(Player p){ openMarket(p,0,"",MarketSort.NEWEST); }
+    private void openMarket(Player p,int requestedPage){openMarket(p,requestedPage,"",MarketSort.NEWEST);}
+    private void openMarket(Player p,int requestedPage,String query,MarketSort sort){
         try {
-            List<BuyOrder> list=plugin.repository().activeOrders();
+            String normalized=query==null?"":query.trim().toLowerCase(Locale.ROOT);
+            List<BuyOrder> list=new ArrayList<>(plugin.repository().activeOrders());
+            if(!normalized.isEmpty())list.removeIf(o->!o.material().name().toLowerCase(Locale.ROOT).contains(normalized)
+                    &&!o.ownerName().toLowerCase(Locale.ROOT).contains(normalized)&&!Long.toString(o.id()).contains(normalized));
+            Comparator<BuyOrder> comparator=switch(sort){
+                case PRICE_LOW->Comparator.comparingDouble(BuyOrder::unitPrice).thenComparing(Comparator.comparingLong(BuyOrder::createdAt).reversed());
+                case PRICE_HIGH->Comparator.comparingDouble(BuyOrder::unitPrice).reversed().thenComparing(Comparator.comparingLong(BuyOrder::createdAt).reversed());
+                case NEWEST->Comparator.comparingLong(BuyOrder::createdAt).reversed();
+            };
+            list.sort(comparator);
             int size=Math.max(27,Math.min(54,plugin.getConfig().getInt("marketplace.size",54)));
             size=((size+8)/9)*9;
             int contentSlots=size-9;
             int maxPage=Math.max(0,(list.size()-1)/contentSlots);
             int page=Math.max(0,Math.min(requestedPage,maxPage));
-            Inventory inv=Bukkit.createInventory(new MarketHolder(page),size,
+            Inventory inv=Bukkit.createInventory(new MarketHolder(page,normalized,sort),size,
                     mm.deserialize(plugin.getConfig().getString("marketplace.title","<dark_purple>SuperOrders</dark_purple>")));
             int start=page*contentSlots;
             int end=Math.min(list.size(),start+contentSlots);
@@ -107,13 +121,18 @@ public final class MarketInventoryListener implements Listener {
                 icon.setItemMeta(m);
                 inv.setItem(slot++,icon);
             }
-            if(list.isEmpty())inv.setItem(size/2,named(Material.PAPER,"<gray>No active orders"));
+            if(list.isEmpty())inv.setItem(size/2,named(Material.PAPER,normalized.isEmpty()?"<gray>No active orders":"<gray>No orders match your search"));
             if(page>0)inv.setItem(size-9,named(Material.ARROW,"<yellow>Previous Page"));
-            if(page<maxPage)inv.setItem(size-1,named(Material.ARROW,"<yellow>Next Page"));
+            inv.setItem(size-8,named(Material.COMPASS,"<aqua>Search: "+(normalized.isEmpty()?"none":normalized)));
+            inv.setItem(size-7,named(Material.HOPPER,"<aqua>Sort: "+sort.label+" (click to change)"));
             inv.setItem(size-5,named(Material.EMERALD,"<green>Create Order"));
+            inv.setItem(size-4,named(Material.BOOK,"<yellow>My Orders"));
+            inv.setItem(size-3,named(Material.WRITABLE_BOOK,"<yellow>Transaction History"));
+            if(page<maxPage)inv.setItem(size-1,named(Material.ARROW,"<yellow>Next Page"));
             p.openInventory(inv);
         } catch(Exception ex){plugin.getLogger().severe("Marketplace query failed: "+ex.getMessage());p.sendMessage("Marketplace could not be loaded.");}
     }
+    private void msgNoPermission(Player p){p.sendMessage("You do not have permission to use that menu.");}
     public void openHistory(Player p) {
         try {
             var records=plugin.repository().historyFor(p.getUniqueId(),45);
@@ -194,13 +213,19 @@ public final class MarketInventoryListener implements Listener {
             case "confirm"->{if(!msg.equalsIgnoreCase("confirm"))throw new IllegalArgumentException("Type confirm or cancel.");long id=orders.create(p,s.material,s.quantity,s.price);inputs.remove(p.getUniqueId());p.sendMessage("Order #"+id+" created; escrow reserved.");}
             case "deliver-quantity"->{int q=Integer.parseInt(msg);if(q<1)throw new IllegalArgumentException("Quantity must be positive.");BuyOrder o=plugin.repository().find(s.orderId);if(o==null||o.status()!=OrderStatus.ACTIVE||q>o.remainingQuantity())throw new IllegalArgumentException("Order changed or quantity exceeds remaining amount.");double total=o.unitPrice()*q;p.sendMessage("Deliver "+q+" "+o.material()+" for $"+total+"? Make sure the items are in your inventory. Type confirm or cancel.");inputs.put(p.getUniqueId(),new InputState("deliver-confirm",s.material,s.orderId,q,total,s.deadline));}
             case "deliver-confirm"->{if(!msg.equalsIgnoreCase("confirm"))throw new IllegalArgumentException("Type confirm or cancel.");inputs.remove(p.getUniqueId());plugin.deliveryService().deliver(p,s.orderId,s.quantity); }
+            case "market-search"->{inputs.remove(p.getUniqueId());MarketSort sort=MarketSort.values()[Math.max(0,Math.min(MarketSort.values().length-1,(int)s.price))];openMarket(p,0,msg,sort);}
             case "cancel-order-confirm"->{if(!msg.equalsIgnoreCase("confirm"))throw new IllegalArgumentException("Type confirm or cancel.");inputs.remove(p.getUniqueId());plugin.orderService().cancel(p,s.orderId,false);p.sendMessage("Order #"+s.orderId+" cancelled. Any unconfirmed refund is recorded for administrator review.");}
             default->{inputs.remove(p.getUniqueId());p.sendMessage("That operation is not available.");}
         }}catch(Exception ex){p.sendMessage("SuperOrders: "+(ex.getMessage()==null?"Input rejected.":ex.getMessage()));}
     }
     private ItemStack named(Material material,String title){ItemStack i=new ItemStack(material);ItemMeta m=i.getItemMeta();m.displayName(mm.deserialize(title));i.setItemMeta(m);return i;}
+    private enum MarketSort {
+        NEWEST("Newest"), PRICE_LOW("Lowest Price"), PRICE_HIGH("Highest Price");
+        private final String label;
+        MarketSort(String label){this.label=label;}
+    }
     private record InputState(String step,Material material,long orderId,int quantity,double price,long deadline){}
-    private static final class MarketHolder implements InventoryHolder{private final int page;private MarketHolder(int page){this.page=page;}@Override public Inventory getInventory(){return null;}}
+    private static final class MarketHolder implements InventoryHolder{private final int page;private final String query;private final MarketSort sort;private MarketHolder(int page,String query,MarketSort sort){this.page=page;this.query=query;this.sort=sort;}@Override public Inventory getInventory(){return null;}}
     private static final class HistoryHolder implements InventoryHolder{@Override public Inventory getInventory(){return null;}}
     private static final class ManageHolder implements InventoryHolder{private final UUID ownerId;private ManageHolder(UUID ownerId){this.ownerId=ownerId;}@Override public Inventory getInventory(){return null;}}
     private static final class DeliveryHolder implements InventoryHolder{private final long orderId;private final Material material;private final int maxQuantity;private DeliveryHolder(long orderId,Material material,int maxQuantity){this.orderId=orderId;this.material=material;this.maxQuantity=maxQuantity;}@Override public Inventory getInventory(){return null;}}
