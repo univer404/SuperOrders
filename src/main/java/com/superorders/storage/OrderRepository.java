@@ -44,6 +44,24 @@ public final class OrderRepository implements AutoCloseable {
     public synchronized void recordRefundObligation(UUID player, double amount, String reason) throws SQLException {
         try (PreparedStatement p=connection.prepareStatement("INSERT INTO recovery_obligations(obligation_id,player_uuid,amount,reason,state,created_at) VALUES(?,?,?,?,?,?)")) { p.setString(1,UUID.randomUUID().toString()); p.setString(2,player.toString()); p.setDouble(3,amount); p.setString(4,reason); p.setString(5,"PENDING"); p.setLong(6,System.currentTimeMillis()); p.executeUpdate(); }
     }
+    public synchronized String cancelAndRecordRefund(long orderId, OrderStatus status, UUID player, double amount, String reason) throws SQLException {
+        String obligation = amount > 0 ? UUID.randomUUID().toString() : null;
+        boolean oldAuto = connection.getAutoCommit(); connection.setAutoCommit(false);
+        try {
+            try (PreparedStatement p=connection.prepareStatement("UPDATE orders SET status=? WHERE id=? AND status=?")) {
+                p.setString(1,status.name()); p.setLong(2,orderId); p.setString(3,OrderStatus.ACTIVE.name());
+                if(p.executeUpdate()!=1) throw new SQLException("Order is not active");
+            }
+            if(amount>0) try(PreparedStatement p=connection.prepareStatement("INSERT INTO recovery_obligations(obligation_id,player_uuid,amount,reason,state,created_at) VALUES(?,?,?,?,?,?)")) {
+                p.setString(1,obligation);p.setString(2,player.toString());p.setDouble(3,amount);p.setString(4,reason);p.setString(5,"PENDING");p.setLong(6,System.currentTimeMillis());p.executeUpdate();
+            }
+            connection.commit(); return obligation;
+        } catch(SQLException ex) { connection.rollback(); throw ex; }
+        finally { connection.setAutoCommit(oldAuto); }
+    }
+    public synchronized void markRefundObligation(String id, String state) throws SQLException {
+        try(PreparedStatement p=connection.prepareStatement("UPDATE recovery_obligations SET state=? WHERE obligation_id=? AND state='PENDING'")) { p.setString(1,state);p.setString(2,id);p.executeUpdate(); }
+    }
     public synchronized int pendingRefundCount() throws SQLException {
         try (PreparedStatement p=connection.prepareStatement("SELECT COUNT(*) FROM recovery_obligations WHERE state=?")) { p.setString(1,"PENDING"); try(ResultSet r=p.executeQuery()){return r.next()?r.getInt(1):0;} }
     }
