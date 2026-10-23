@@ -40,6 +40,12 @@ public final class OrderRepository implements AutoCloseable {
     public synchronized BuyOrder find(long id) throws SQLException {
         try(PreparedStatement p=connection.prepareStatement("SELECT * FROM orders WHERE id=?")){p.setLong(1,id);try(ResultSet r=p.executeQuery()){return r.next()?map(r):null;}}
     }
+    public synchronized void recordRefundObligation(UUID player, double amount, String reason) throws SQLException {
+        try (PreparedStatement p=connection.prepareStatement("INSERT INTO recovery_obligations(obligation_id,player_uuid,amount,reason,state,created_at) VALUES(?,?,?,?,?,?)")) { p.setString(1,UUID.randomUUID().toString()); p.setString(2,player.toString()); p.setDouble(3,amount); p.setString(4,reason); p.setString(5,"PENDING"); p.setLong(6,System.currentTimeMillis()); p.executeUpdate(); }
+    }
+    public synchronized int pendingRefundCount() throws SQLException {
+        try (PreparedStatement p=connection.prepareStatement("SELECT COUNT(*) FROM recovery_obligations WHERE state=?")) { p.setString(1,"PENDING"); try(ResultSet r=p.executeQuery()){return r.next()?r.getInt(1):0;} }
+    }
     public synchronized void setStatus(long id, OrderStatus status) throws SQLException {
         try(PreparedStatement p=connection.prepareStatement("UPDATE orders SET status=? WHERE id=? AND status=?")){p.setString(1,status.name());p.setLong(2,id);p.setString(3,OrderStatus.ACTIVE.name());if(p.executeUpdate()!=1)throw new SQLException("Order is not active");}
     }
