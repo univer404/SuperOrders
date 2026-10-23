@@ -25,8 +25,8 @@ public final class SuperOrders extends JavaPlugin {
         saveDefaultConfig(); saveResource("messages.yml", false); saveResource("gui.yml", false);
         guiConfig = YamlConfiguration.loadConfiguration(new File(getDataFolder(), "gui.yml"));
         if (!setupEconomy()) { getLogger().severe("Vault-compatible economy provider not found. Disabling SuperOrders."); getServer().getPluginManager().disablePlugin(this); return; }
-        try { if (!getDataFolder().exists() && !getDataFolder().mkdirs()) throw new SQLException("Cannot create plugin data folder"); repository = new OrderRepository(new File(getDataFolder(),getConfig().getString("database.file","orders.db"))); }
-        catch(SQLException e){getLogger().severe("SQLite initialization failed: "+e.getMessage());getServer().getPluginManager().disablePlugin(this);return;}
+        try { if (!getDataFolder().exists() && !getDataFolder().mkdirs()) throw new SQLException("Cannot create plugin data folder"); repository = new OrderRepository(new File(getDataFolder(), "orders.yml")); }
+        catch(SQLException e){getLogger().severe("YAML storage initialization failed: "+e.getMessage());getServer().getPluginManager().disablePlugin(this);return;}
         if (getConfig().getBoolean("transactions.recovery-on-startup", true)) {
             try {
                 int pendingRefunds = repository.pendingRefundCount();
