@@ -230,7 +230,7 @@ public final class MarketInventoryListener implements Listener {
             if(slot==45&&holder.page>0){openMaterialPicker(p,holder.page-1);return;}
             if(slot==53){openMaterialPicker(p,holder.page+1);return;}
             ItemStack selected=e.getCurrentItem();if(selected==null||selected.getType().isAir()||!selected.getType().isItem())return;
-            openCreateSettings(p,selected.getType(),16,1.0);return;
+            openCreateSettings(p,selected.getType(),16,plugin.getConfig().getDouble("orders.min-unit-price",0.01));return;
         }
         if(slot==26){p.closeInventory();p.sendMessage("Order creation cancelled.");return;}
         int quantity=holder.quantity;double price=holder.price;
