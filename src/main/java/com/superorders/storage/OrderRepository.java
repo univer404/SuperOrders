@@ -84,7 +84,7 @@ public final class OrderRepository implements AutoCloseable {
         String obligation = amount > 0 ? UUID.randomUUID().toString() : null;
         boolean oldAuto = connection.getAutoCommit(); connection.setAutoCommit(false);
         try {
-            try (PreparedStatement p=connection.prepareStatement("UPDATE orders SET status=? WHERE id=? AND status=?")) {
+            try (PreparedStatement p=connection.prepareStatement("UPDATE orders SET status=?, remaining_escrow=0 WHERE id=? AND status=?")) {
                 p.setString(1,status.name()); p.setLong(2,orderId); p.setString(3,OrderStatus.ACTIVE.name());
                 if(p.executeUpdate()!=1) throw new SQLException("Order is not active");
             }
