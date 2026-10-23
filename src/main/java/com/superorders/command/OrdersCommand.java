@@ -32,7 +32,11 @@ public final class OrdersCommand implements CommandExecutor, TabCompleter {
                     if(obligations.isEmpty()) sender.sendMessage("No open refund obligations.");
                     for(var obligation:obligations) sender.sendMessage("Refund "+obligation.id()+" | player="+obligation.playerId()
                             +" | amount="+obligation.amount()+" | state="+obligation.state()+" | reason="+obligation.reason());
-                    sender.sendMessage("IMPORTANT: verify the economy transaction history before manually paying an obligation. PROCESSING entries must not be retried without reconciliation.");
+                    var transactions=plugin.repository().pendingTransactions(20);
+                    if(transactions.isEmpty()) sender.sendMessage("No unresolved transaction journal entries.");
+                    for(var tx:transactions) sender.sendMessage("Transaction "+tx.transactionId()+" | order="+tx.orderId()
+                            +" | actor="+tx.actorUuid()+" | state="+tx.state()+" | amount="+tx.amount()+" | details="+tx.details());
+                    sender.sendMessage("IMPORTANT: verify economy-provider history before manually paying or restoring anything. PROCESSING entries and ambiguous payouts must not be retried without reconciliation.");
                 } catch(Exception ex){sender.sendMessage("Recovery inspection failed: "+ex.getMessage());}
             }
             else if(args.length>2&&args[1].equalsIgnoreCase("refund")) {
