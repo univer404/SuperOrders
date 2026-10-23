@@ -27,7 +27,12 @@ public final class MarketInventoryListener implements Listener {
     @EventHandler public void onClick(InventoryClickEvent e){
         if(!(e.getWhoClicked() instanceof Player p)||!isMarket(e.getView().getTopInventory()))return;
         e.setCancelled(true); if(e.getClickedInventory()!=e.getView().getTopInventory())return;
-        int slot=e.getRawSlot(); if(slot==e.getView().getTopInventory().getSize()-5){e.setCancelled(true);if(!p.hasPermission("superorders.create")){p.sendMessage("You do not have permission to create orders.");return;}p.closeInventory();beginCreate(p);return;}
+        int slot=e.getRawSlot();
+        MarketHolder holder=(MarketHolder)e.getView().getTopInventory().getHolder();
+        int size=e.getView().getTopInventory().getSize();
+        if(slot==size-9){ if(holder.page>0)openMarket(p,holder.page-1); return; }
+        if(slot==size-1){ openMarket(p,holder.page+1); return; }
+        if(slot==size-5){e.setCancelled(true);if(!p.hasPermission("superorders.create")){p.sendMessage("You do not have permission to create orders.");return;}p.closeInventory();beginCreate(p);return;}
         ItemStack item=e.getCurrentItem();if(item==null||item.getType().isAir()||!item.hasItemMeta())return;
         var lore=item.getItemMeta().lore();if(lore==null)return;
         for(var line:lore){String plain=net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(line);if(plain.startsWith("Order #"))try{beginDelivery(p,Long.parseLong(plain.substring(7)));return;}catch(NumberFormatException ignored){}}
@@ -51,12 +56,39 @@ public final class MarketInventoryListener implements Listener {
     }
     @EventHandler public void onDrag(InventoryDragEvent e){if(isMarket(e.getView().getTopInventory())||e.getView().getTopInventory().getHolder() instanceof DeliveryHolder)e.setCancelled(true);}
     private boolean isMarket(Inventory i){return i.getHolder() instanceof MarketHolder;}
-    public void openMarket(Player p){
-        try{List<BuyOrder> list=plugin.repository().activeOrders();int size=Math.max(27,Math.min(54,plugin.getConfig().getInt("marketplace.size",54)));size=((size+8)/9)*9;
-            Inventory inv=Bukkit.createInventory(new MarketHolder(),size,mm.deserialize(plugin.getConfig().getString("marketplace.title","<dark_purple>SuperOrders</dark_purple>")));int slot=0;
-            for(BuyOrder o:list){if(slot>=size-9)break;ItemStack icon=new ItemStack(o.material());ItemMeta m=icon.getItemMeta();m.displayName(mm.deserialize("<light_purple>"+o.material().name().replace('_',' ')+"</light_purple>"));m.lore(List.of(mm.deserialize("<gray>Owner: <white>"+o.ownerName()),mm.deserialize("<gray>Remaining: <white>"+o.remainingQuantity()),mm.deserialize("<gray>Price each: <white>"+o.unitPrice()),mm.deserialize("<gray>Remaining value: <white>"+o.remainingValue()),mm.deserialize("<yellow>Order #"+o.id())));icon.setItemMeta(m);inv.setItem(slot++,icon);}
-            if(list.isEmpty())inv.setItem(size/2,named(Material.PAPER,"<gray>No active orders"));inv.setItem(size-5,named(Material.EMERALD,"<green>Create Order"));p.openInventory(inv);
-        }catch(Exception ex){plugin.getLogger().severe("Marketplace query failed: "+ex.getMessage());p.sendMessage("Marketplace could not be loaded.");}
+    public void openMarket(Player p){ openMarket(p,0); }
+    private void openMarket(Player p,int requestedPage){
+        try {
+            List<BuyOrder> list=plugin.repository().activeOrders();
+            int size=Math.max(27,Math.min(54,plugin.getConfig().getInt("marketplace.size",54)));
+            size=((size+8)/9)*9;
+            int contentSlots=size-9;
+            int maxPage=Math.max(0,(list.size()-1)/contentSlots);
+            int page=Math.max(0,Math.min(requestedPage,maxPage));
+            Inventory inv=Bukkit.createInventory(new MarketHolder(page),size,
+                    mm.deserialize(plugin.getConfig().getString("marketplace.title","<dark_purple>SuperOrders</dark_purple>")));
+            int start=page*contentSlots;
+            int end=Math.min(list.size(),start+contentSlots);
+            int slot=0;
+            for(int index=start;index<end;index++){
+                BuyOrder o=list.get(index);
+                ItemStack icon=new ItemStack(o.material());
+                ItemMeta m=icon.getItemMeta();
+                m.displayName(mm.deserialize("<light_purple>"+o.material().name().replace('_',' ')+"</light_purple>"));
+                m.lore(List.of(mm.deserialize("<gray>Owner: <white>"+o.ownerName()),
+                        mm.deserialize("<gray>Remaining: <white>"+o.remainingQuantity()),
+                        mm.deserialize("<gray>Price each: <white>"+o.unitPrice()),
+                        mm.deserialize("<gray>Remaining value: <white>"+o.remainingValue()),
+                        mm.deserialize("<yellow>Order #"+o.id())));
+                icon.setItemMeta(m);
+                inv.setItem(slot++,icon);
+            }
+            if(list.isEmpty())inv.setItem(size/2,named(Material.PAPER,"<gray>No active orders"));
+            if(page>0)inv.setItem(size-9,named(Material.ARROW,"<yellow>Previous Page"));
+            if(page<maxPage)inv.setItem(size-1,named(Material.ARROW,"<yellow>Next Page"));
+            inv.setItem(size-5,named(Material.EMERALD,"<green>Create Order"));
+            p.openInventory(inv);
+        } catch(Exception ex){plugin.getLogger().severe("Marketplace query failed: "+ex.getMessage());p.sendMessage("Marketplace could not be loaded.");}
     }
     public void beginCreate(Player p){inputs.put(p.getUniqueId(),new InputState("material",null,0,0,0,System.currentTimeMillis()+60_000));p.sendMessage("Type the item material (e.g. DIAMOND), or cancel:");}
     private void beginDelivery(Player p,long id){
@@ -94,6 +126,6 @@ public final class MarketInventoryListener implements Listener {
     }
     private ItemStack named(Material material,String title){ItemStack i=new ItemStack(material);ItemMeta m=i.getItemMeta();m.displayName(mm.deserialize(title));i.setItemMeta(m);return i;}
     private record InputState(String step,Material material,long orderId,int quantity,double price,long deadline){}
-    private static final class MarketHolder implements InventoryHolder{@Override public Inventory getInventory(){return null;}}
+    private static final class MarketHolder implements InventoryHolder{private final int page;private MarketHolder(int page){this.page=page;}@Override public Inventory getInventory(){return null;}}
     private static final class DeliveryHolder implements InventoryHolder{private final long orderId;private final Material material;private final int maxQuantity;private DeliveryHolder(long orderId,Material material,int maxQuantity){this.orderId=orderId;this.material=material;this.maxQuantity=maxQuantity;}@Override public Inventory getInventory(){return null;}}
 }
