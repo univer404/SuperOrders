@@ -23,8 +23,49 @@ public final class OrdersCommand implements CommandExecutor, TabCompleter {
             else if(args.length>1&&args[1].equalsIgnoreCase("debug")){if(!sender.hasPermission("superorders.admin.debug")){msg(sender,"no-permission");return true;}try{sender.sendMessage("SuperOrders enabled="+plugin.isEnabled()+", economy="+plugin.economy().getName()+", SQLite="+(plugin.repository()!=null)+", pendingRefunds="+plugin.repository().pendingRefundCount()+", interruptedTransactions="+plugin.repository().pendingTransactionCount());}catch(Exception ex){sender.sendMessage("Diagnostic failed: "+ex.getMessage());}}
             else if(args.length>2&&args[1].equalsIgnoreCase("inspect")){if(!sender.hasPermission("superorders.admin.inspect")){msg(sender,"no-permission");return true;}try{long id=Long.parseLong(args[2]);BuyOrder o=plugin.repository().find(id);sender.sendMessage(o==null?"Order not found.":"Order #"+o.id()+" owner="+o.ownerName()+" item="+o.material()+" remaining="+o.remainingQuantity()+" unitPrice="+o.unitPrice()+" escrow="+o.remainingEscrow()+" status="+o.status()+" expiresAt="+o.expiresAt());}catch(Exception ex){sender.sendMessage("Inspect failed: "+ex.getMessage());}}
             else if(args.length>2&&args[1].equalsIgnoreCase("cancel")){if(!sender.hasPermission("superorders.admin.cancel")){msg(sender,"no-permission");return true;}try{long id=Long.parseLong(args[2]);if(!(sender instanceof Player actor)){sender.sendMessage("Run this from in-game for now.");return true;}plugin.orderService().cancel(actor,id,true);sender.sendMessage("Cancellation processed for order #"+id+".");}catch(Exception ex){sender.sendMessage("Cancel failed: "+ex.getMessage());}}
-            else if(args.length>1&&args[1].equalsIgnoreCase("recover")){if(!sender.hasPermission("superorders.admin.recover")){msg(sender,"no-permission");return true;}try{sender.sendMessage("Pending refund obligations: "+plugin.repository().pendingRefundCount()+", interrupted transaction records: "+plugin.repository().pendingTransactionCount()+". Review SQLite journal details before any manual compensation; automatic retry is disabled to prevent duplicate payouts.");}catch(Exception ex){sender.sendMessage("Recovery inspection failed: "+ex.getMessage());}}
-            else sender.sendMessage("Admin: /orders admin reload|inspect <id>|cancel <id>|refund <player>|recover|debug");return true;}
+            else if(args.length>1&&args[1].equalsIgnoreCase("recover")) {
+                if(!sender.hasPermission("superorders.admin.recover")){msg(sender,"no-permission");return true;}
+                try {
+                    sender.sendMessage("Pending refund obligations: "+plugin.repository().pendingRefundCount()
+                            +", interrupted transaction records: "+plugin.repository().pendingTransactionCount()+".");
+                    var obligations=plugin.repository().pendingObligations(20);
+                    if(obligations.isEmpty()) sender.sendMessage("No open refund obligations.");
+                    for(var obligation:obligations) sender.sendMessage("Refund "+obligation.id()+" | player="+obligation.playerId()
+                            +" | amount="+obligation.amount()+" | state="+obligation.state()+" | reason="+obligation.reason());
+                    sender.sendMessage("IMPORTANT: verify the economy transaction history before manually paying an obligation. PROCESSING entries must not be retried without reconciliation.");
+                } catch(Exception ex){sender.sendMessage("Recovery inspection failed: "+ex.getMessage());}
+            }
+            else if(args.length>2&&args[1].equalsIgnoreCase("refund")) {
+                if(!sender.hasPermission("superorders.admin.refund")){msg(sender,"no-permission");return true;}
+                String id=args[2];
+                try {
+                    var obligation=plugin.repository().findObligation(id);
+                    if(obligation==null){sender.sendMessage("Refund obligation not found: "+id);return true;}
+                    if(!List.of("PENDING","REVIEW").contains(obligation.state())) {
+                        sender.sendMessage("Cannot process obligation in state "+obligation.state()+". PROCESSING or PAID entries are not retryable.");
+                        return true;
+                    }
+                    if(!plugin.repository().claimRefundObligation(id)) {
+                        sender.sendMessage("Another operation already claimed this obligation. Check /orders admin recover.");
+                        return true;
+                    }
+                    sender.sendMessage("Processing refund obligation "+id+" for "+obligation.amount()+" to "+obligation.playerId()+". Verify the account history first to avoid a duplicate payout.");
+                    try {
+                        var response=plugin.economy().depositPlayer(plugin.getServer().getOfflinePlayer(obligation.playerId()),obligation.amount());
+                        if(response.transactionSuccess()) {
+                            plugin.repository().finishRefundObligation(id,"PAID");
+                            sender.sendMessage("Refund marked PAID.");
+                        } else {
+                            plugin.repository().finishRefundObligation(id,"REVIEW");
+                            sender.sendMessage("Economy did not confirm the payout. Obligation moved to REVIEW; reconcile provider history before retrying.");
+                        }
+                    } catch(Exception payoutError) {
+                        sender.sendMessage("Payout outcome is uncertain. The obligation remains PROCESSING and will not be retried automatically. Check provider history before any manual action.");
+                        plugin.getLogger().severe("Refund payout outcome uncertain for obligation "+id+": "+payoutError.getMessage());
+                    }
+                } catch(Exception ex){sender.sendMessage("Refund processing failed: "+ex.getMessage());}
+            }
+            else sender.sendMessage("Admin: /orders admin reload|inspect <id>|cancel <id>|recover|refund <obligation-id>|debug");return true;}
         if(!(sender instanceof Player player)){msg(sender,"player-only");return true;}if(!player.hasPermission("superorders.use")){msg(player,"no-permission");return true;}
         String sub=args.length==0?"market":args[0].toLowerCase(Locale.ROOT);switch(sub){case "market"->openMarket(player);case "create"->{if(!player.hasPermission("superorders.create")){msg(player,"no-permission");}else{plugin.marketListener().beginCreate(player);}}case "mine"->{if(!player.hasPermission("superorders.mine")){msg(player,"no-permission");}else try{var own=plugin.repository().ordersFor(player.getUniqueId());if(own.isEmpty())player.sendMessage("You have not created any orders.");else for(BuyOrder o:own)player.sendMessage("#"+o.id()+" "+o.material()+" remaining="+o.remainingQuantity()+" price="+o.unitPrice()+" escrow="+o.remainingEscrow()+" status="+o.status());}catch(Exception ex){player.sendMessage("Could not load your orders.");}}case "history"->{if(!player.hasPermission("superorders.history")){msg(player,"no-permission");break;}try{var history=plugin.repository().historyFor(player.getUniqueId(),20);if(history.isEmpty())player.sendMessage("No transactions recorded.");else for(var t:history)player.sendMessage("#"+t.orderId()+" "+t.state()+" qty="+t.quantity()+" amount="+t.amount()+" at="+java.time.Instant.ofEpochMilli(t.createdAt()));}catch(Exception ex){player.sendMessage("Could not load transaction history.");}}case "cancel"->{if(!player.hasPermission("superorders.cancel")){msg(player,"no-permission");}else if(args.length<2){player.sendMessage("Usage: /orders cancel <orderId>");}else try{long id=Long.parseLong(args[1]);plugin.orderService().cancel(player,id,false);player.sendMessage("Order #"+id+" cancelled.");}catch(Exception ex){player.sendMessage("Could not cancel order: "+ex.getMessage());}}case "help"->player.sendMessage(mm.deserialize("<gold>SuperOrders: /orders, /orders create, /orders mine, /orders cancel <id>, /orders history"));default->openMarket(player);}return true;
     }
