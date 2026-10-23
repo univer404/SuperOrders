@@ -39,6 +39,50 @@ public final class OrdersCommand implements CommandExecutor, TabCompleter {
                     sender.sendMessage("IMPORTANT: verify economy-provider history before manually paying or restoring anything. PROCESSING entries and ambiguous payouts must not be retried without reconciliation.");
                 } catch(Exception ex){sender.sendMessage("Recovery inspection failed: "+ex.getMessage());}
             }
+            else if(args.length>3&&args[1].equalsIgnoreCase("resolve")) {
+                if(!sender.hasPermission("superorders.admin.recover")){msg(sender,"no-permission");return true;}
+                String transactionId=args[2];
+                String action=args[3].toLowerCase(Locale.ROOT);
+                try {
+                    var tx=plugin.repository().findTransaction(transactionId);
+                    if(tx==null){sender.sendMessage("Transaction not found: "+transactionId);return true;}
+                    if(action.equals("paid")) {
+                        if(!tx.state().equals("PAYMENT_PENDING")) {
+                            sender.sendMessage("Only PAYMENT_PENDING transactions can be finalized as paid. Current state: "+tx.state());
+                            return true;
+                        }
+                        sender.sendMessage("Verify the economy provider's history first. Finalizing will consume escrow for order #"+tx.orderId()+" and will not send another payout.");
+                        plugin.repository().finishDelivery(tx.orderId(),tx.quantity(),tx.amount(),tx.transactionId());
+                        sender.sendMessage("Transaction finalized as paid; no new economy payout was sent.");
+                        return true;
+                    }
+                    if(action.equals("restore")) {
+                        if(!tx.state().equals("ITEMS_RESERVED")) {
+                            sender.sendMessage("Only ITEMS_RESERVED transactions can use this restore action. Current state: "+tx.state());
+                            return true;
+                        }
+                        java.util.UUID sellerId=java.util.UUID.fromString(tx.actorUuid());
+                        Player seller=plugin.getServer().getPlayer(sellerId);
+                        if(seller==null){sender.sendMessage("Seller must be online to restore items safely.");return true;}
+                        var order=plugin.repository().find(tx.orderId());
+                        if(order==null){sender.sendMessage("Order record missing; cannot determine the item material.");return true;}
+                        if(!plugin.repository().claimTransactionState(transactionId,"ITEMS_RESERVED","ITEM_RESTORE_PENDING","Administrator started item restoration; do not retry without checking inventory.")) {
+                            sender.sendMessage("Transaction state changed; inspect /orders admin recover.");
+                            return true;
+                        }
+                        org.bukkit.inventory.ItemStack items=new org.bukkit.inventory.ItemStack(order.material(),tx.quantity());
+                        var leftovers=seller.getInventory().addItem(items);
+                        for(var leftover:leftovers.values())seller.getWorld().dropItemNaturally(seller.getLocation(),leftover);
+                        plugin.repository().setTransactionState(transactionId,"ITEMS_RESTORED","Administrator restored "+tx.quantity()+" "+order.material()+" to seller "+sellerId+".");
+                        sender.sendMessage("Items restored to "+seller.getName()+". Verify their inventory and transaction journal.");
+                        return true;
+                    }
+                    sender.sendMessage("Usage: /orders admin resolve <transaction-id> <paid|restore>");
+                } catch(Exception ex) {
+                    sender.sendMessage("Transaction resolution needs manual review: "+ex.getMessage());
+                    plugin.getLogger().severe("Recovery failed for transaction "+transactionId+": "+ex.getMessage());
+                }
+            }
             else if(args.length>2&&args[1].equalsIgnoreCase("refund")) {
                 if(!sender.hasPermission("superorders.admin.refund")){msg(sender,"no-permission");return true;}
                 String id=args[2];
@@ -69,11 +113,11 @@ public final class OrdersCommand implements CommandExecutor, TabCompleter {
                     }
                 } catch(Exception ex){sender.sendMessage("Refund processing failed: "+ex.getMessage());}
             }
-            else sender.sendMessage("Admin: /orders admin reload|inspect <id>|cancel <id>|recover|refund <obligation-id>|debug");return true;}
+            else sender.sendMessage("Admin: /orders admin reload|inspect <id>|cancel <id>|recover|resolve <transaction-id> <paid|restore>|refund <obligation-id>|debug");return true;}
         if(!(sender instanceof Player player)){msg(sender,"player-only");return true;}if(!player.hasPermission("superorders.use")){msg(player,"no-permission");return true;}
         String sub=args.length==0?"market":args[0].toLowerCase(Locale.ROOT);switch(sub){case "market"->{if(!player.hasPermission("superorders.market")){msg(player,"no-permission");}else openMarket(player);}case "create"->{if(!player.hasPermission("superorders.create")){msg(player,"no-permission");}else{plugin.marketListener().beginCreate(player);}}case "mine"->{if(!player.hasPermission("superorders.mine")){msg(player,"no-permission");}else plugin.marketListener().openMine(player);}case "history"->{if(!player.hasPermission("superorders.history")){msg(player,"no-permission");}else plugin.marketListener().openHistory(player);}case "cancel"->{if(!player.hasPermission("superorders.cancel")){msg(player,"no-permission");}else if(args.length<2){player.sendMessage("Usage: /orders cancel <orderId>");}else try{long id=Long.parseLong(args[1]);plugin.orderService().cancel(player,id,false);player.sendMessage("Order #"+id+" cancelled.");}catch(Exception ex){player.sendMessage("Could not cancel order: "+ex.getMessage());}}case "help"->player.sendMessage(mm.deserialize("<gold>SuperOrders: /orders, /orders create, /orders mine, /orders cancel <id>, /orders history"));default->{if(!player.hasPermission("superorders.market"))msg(player,"no-permission");else openMarket(player);}}return true;
     }
     private void openMarket(Player player){ plugin.marketListener().openMarket(player); }
     private ItemStack named(Material material,String title){ItemStack i=new ItemStack(material);ItemMeta m=i.getItemMeta();m.displayName(mm.deserialize(title));i.setItemMeta(m);return i;}
-    @Override public List<String> onTabComplete(CommandSender sender,Command command,String alias,String[] args){if(args.length==1)return List.of("market","create","mine","cancel","history","help","admin");if(args.length==2&&args[0].equalsIgnoreCase("admin"))return List.of("reload","inspect","cancel","refund","recover","debug");return List.of();}
+    @Override public List<String> onTabComplete(CommandSender sender,Command command,String alias,String[] args){if(args.length==1)return List.of("market","create","mine","cancel","history","help","admin");if(args.length==2&&args[0].equalsIgnoreCase("admin"))return List.of("reload","inspect","cancel","refund","recover","resolve","debug");return List.of();}
 }
