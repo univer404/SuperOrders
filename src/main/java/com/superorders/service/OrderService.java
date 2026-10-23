@@ -27,16 +27,29 @@ public final class OrderService {
         if (!allowed.isEmpty() && !allowed.contains(material.name())) throw new IllegalArgumentException("That material is not allowed.");
         if (blocked.contains(material.name())) throw new IllegalArgumentException("That material is blocked.");
         if (plugin.economy().getBalance(player) + 1e-8 < total) throw new IllegalArgumentException("You do not have enough money.");
+        String transactionId = plugin.repository().recordTransaction(player.getUniqueId(), 0, quantity, total, "ESCROW_WITHDRAW_PENDING",
+                "Order creation intent; material=" + material.name() + "; owner=" + player.getUniqueId());
         var response = plugin.economy().withdrawPlayer(player, total);
-        if (!response.transactionSuccess()) throw new IllegalStateException("Economy withdrawal failed: " + response.errorMessage);
+        if (!response.transactionSuccess()) {
+            plugin.repository().setTransactionState(transactionId, "WITHDRAW_FAILED", response.errorMessage);
+            throw new IllegalStateException("Economy withdrawal failed: " + response.errorMessage);
+        }
         long now = System.currentTimeMillis();
         long lifetime = plugin.getConfig().getLong("orders.expiration.default-lifetime-hours", 168) * 3_600_000L;
         try {
-            return plugin.repository().create(player.getUniqueId(), player.getName(), material, quantity, unitPrice, total, now,
+            long orderId = plugin.repository().create(player.getUniqueId(), player.getName(), material, quantity, unitPrice, total, now,
                     plugin.getConfig().getBoolean("orders.expiration.enabled", true) ? now + lifetime : Long.MAX_VALUE);
+            plugin.repository().setTransactionState(transactionId, "ESCROW_RESERVED", "Created order #" + orderId);
+            return orderId;
         } catch (Exception dbFailure) {
             var refund = plugin.economy().depositPlayer(player, total);
-            if (!refund.transactionSuccess()) { plugin.getLogger().severe("CRITICAL: failed to compensate order creation withdrawal for " + player.getUniqueId() + " amount=" + total); try { plugin.repository().recordRefundObligation(player.getUniqueId(), total, "Failed order-creation compensation"); } catch (Exception recordFailure) { plugin.getLogger().severe("CRITICAL: could not persist compensation obligation: " + recordFailure.getMessage()); } }
+            if (refund.transactionSuccess()) plugin.repository().setTransactionState(transactionId, "COMPENSATED", "Order persistence failed; escrow returned.");
+            else {
+                plugin.getLogger().severe("CRITICAL: failed to compensate order creation withdrawal for " + player.getUniqueId() + " amount=" + total);
+                plugin.repository().setTransactionState(transactionId, "FAILED_REQUIRES_REVIEW", "Order persistence failed and compensation could not be confirmed: " + dbFailure.getMessage());
+                try { plugin.repository().recordRefundObligation(player.getUniqueId(), total, "Failed order-creation compensation transaction " + transactionId); }
+                catch (Exception recordFailure) { plugin.getLogger().severe("CRITICAL: could not persist compensation obligation: " + recordFailure.getMessage()); }
+            }
             throw dbFailure;
         }
     }
