@@ -68,9 +68,25 @@ public final class OrderService {
             double refundAmount = order.remainingEscrow();
             String obligation = plugin.repository().cancelAndRecordRefund(orderId, OrderStatus.CANCELLED, order.ownerId(), refundAmount, "Order cancellation #" + orderId);
             if (refundAmount > 0) {
-                var response = plugin.economy().depositPlayer(plugin.getServer().getOfflinePlayer(order.ownerId()), refundAmount);
-                if (response.transactionSuccess()) plugin.repository().markRefundObligation(obligation, "PAID");
-                else actor.sendMessage("Refund could not be confirmed. A durable refund obligation was recorded for administrator review; do not retry blindly.");
+                // Claim before calling Vault. If the server stops during the payout, PROCESSING
+                // prevents an automatic or accidental second payment until history is reconciled.
+                if (!plugin.repository().claimRefundObligation(obligation)) {
+                    actor.sendMessage("Order cancelled, but its refund is already being processed. Check with an administrator before retrying.");
+                    return true;
+                }
+                try {
+                    var response = plugin.economy().depositPlayer(plugin.getServer().getOfflinePlayer(order.ownerId()), refundAmount);
+                    if (response.transactionSuccess()) {
+                        plugin.repository().finishRefundObligation(obligation, "PAID");
+                    } else {
+                        plugin.repository().finishRefundObligation(obligation, "REVIEW");
+                        actor.sendMessage("Refund was not confirmed. It is recorded for administrator review; do not retry blindly.");
+                    }
+                } catch (Exception payoutError) {
+                    // Leave PROCESSING when the provider outcome is ambiguous.
+                    plugin.getLogger().severe("Refund outcome uncertain for obligation " + obligation + ": " + payoutError.getMessage());
+                    actor.sendMessage("Refund outcome is uncertain. An administrator must check economy history before retrying.");
+                }
             }
             return true;
         } finally { lock.unlock(); }
@@ -90,8 +106,22 @@ public final class OrderService {
                     }
                     String obligation = plugin.repository().cancelAndRecordRefund(current.id(), OrderStatus.EXPIRED, current.ownerId(), current.remainingEscrow(), "Expired order #" + current.id());
                     if (current.remainingEscrow() > 0) {
-                        var response = plugin.economy().depositPlayer(plugin.getServer().getOfflinePlayer(current.ownerId()), current.remainingEscrow());
-                        if (response.transactionSuccess()) plugin.repository().markRefundObligation(obligation, "PAID");
+                        if (plugin.repository().claimRefundObligation(obligation)) {
+                            try {
+                                var response = plugin.economy().depositPlayer(plugin.getServer().getOfflinePlayer(current.ownerId()), current.remainingEscrow());
+                                if (response.transactionSuccess()) {
+                                    plugin.repository().finishRefundObligation(obligation, "PAID");
+                                } else {
+                                    plugin.repository().finishRefundObligation(obligation, "REVIEW");
+                                    plugin.getLogger().warning("Expiration refund was not confirmed for obligation " + obligation + "; administrator review required.");
+                                }
+                            } catch (Exception payoutError) {
+                                // Keep PROCESSING for ambiguous provider outcomes; never auto-pay twice.
+                                plugin.getLogger().severe("Expiration refund outcome uncertain for obligation " + obligation + ": " + payoutError.getMessage());
+                            }
+                        } else {
+                            plugin.getLogger().warning("Could not claim expiration refund obligation " + obligation + "; administrator review required.");
+                        }
                     }
                     Player owner = plugin.getServer().getPlayer(current.ownerId());
                     if (owner != null) owner.sendMessage("Your SuperOrders order #" + current.id() + " expired. Any refund that could not be processed was recorded for recovery.");
