@@ -36,7 +36,7 @@ public final class OrderService {
                     plugin.getConfig().getBoolean("orders.expiration.enabled", true) ? now + lifetime : Long.MAX_VALUE);
         } catch (Exception dbFailure) {
             var refund = plugin.economy().depositPlayer(player, total);
-            if (!refund.transactionSuccess()) plugin.getLogger().severe("CRITICAL: failed to compensate order creation withdrawal for " + player.getUniqueId() + " amount=" + total);
+            if (!refund.transactionSuccess()) { plugin.getLogger().severe("CRITICAL: failed to compensate order creation withdrawal for " + player.getUniqueId() + " amount=" + total); try { plugin.repository().recordRefundObligation(player.getUniqueId(), total, "Failed order-creation compensation"); } catch (Exception recordFailure) { plugin.getLogger().severe("CRITICAL: could not persist compensation obligation: " + recordFailure.getMessage()); } }
             throw dbFailure;
         }
     }
@@ -59,6 +59,26 @@ public final class OrderService {
             }
             return true;
         } finally { lock.unlock(); }
+    }
+
+    public void expireDueOrders() {
+        try {
+            for (BuyOrder order : plugin.repository().expiredActiveOrders(System.currentTimeMillis())) {
+                ReentrantLock lock = locks.computeIfAbsent(order.id(), ignored -> new ReentrantLock());
+                if (!lock.tryLock()) continue;
+                try {
+                    BuyOrder current = plugin.repository().find(order.id());
+                    if (current == null || current.status() != OrderStatus.ACTIVE || current.expiresAt() > System.currentTimeMillis()) continue;
+                    plugin.repository().setStatus(current.id(), OrderStatus.EXPIRED);
+                    if (current.remainingEscrow() > 0) {
+                        var response = plugin.economy().depositPlayer(plugin.getServer().getOfflinePlayer(current.ownerId()), current.remainingEscrow());
+                        if (!response.transactionSuccess()) plugin.repository().recordRefundObligation(current.ownerId(), current.remainingEscrow(), "Expired order #" + current.id());
+                    }
+                    Player owner = plugin.getServer().getPlayer(current.ownerId());
+                    if (owner != null) owner.sendMessage("Your SuperOrders order #" + current.id() + " expired. Any refund that could not be processed was recorded for recovery.");
+                } finally { lock.unlock(); }
+            }
+        } catch (Exception ex) { plugin.getLogger().severe("Order expiration pass failed: " + ex.getMessage()); }
     }
 
     public ReentrantLock lockFor(long id) { return locks.computeIfAbsent(id, ignored -> new ReentrantLock()); }
