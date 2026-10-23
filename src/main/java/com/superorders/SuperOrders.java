@@ -41,6 +41,6 @@ public final class SuperOrders extends JavaPlugin {
         getLogger().info("SuperOrders loaded. Review the README transaction-safety notes before production use.");
     }
     private boolean setupEconomy(){if(getServer().getPluginManager().getPlugin("Vault")==null)return false;RegisteredServiceProvider<Economy> p=getServer().getServicesManager().getRegistration(Economy.class);if(p==null)return false;economy=p.getProvider();return economy!=null;}
-    public Economy economy(){return economy;} public OrderRepository repository(){return repository;} public OrderService orderService(){return orderService;} public DeliveryService deliveryService(){return deliveryService;} public MarketInventoryListener marketListener(){return marketListener;} public FileConfiguration guiConfig(){return guiConfig;}
+    public Economy economy(){return economy;} public OrderRepository repository(){return repository;} public OrderService orderService(){return orderService;} public DeliveryService deliveryService(){return deliveryService;} public MarketInventoryListener marketListener(){return marketListener;} public FileConfiguration guiConfig(){return guiConfig;} public void reloadGuiConfig(){guiConfig=YamlConfiguration.loadConfiguration(new File(getDataFolder(), "gui.yml"));}
     @Override public void onDisable(){if(repository!=null)try{repository.close();}catch(SQLException e){getLogger().severe("SQLite close failed: "+e.getMessage());}}
 }
