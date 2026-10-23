@@ -1,30 +1,34 @@
 # SuperOrders
 
-SuperOrders is a Paper/Purpur Java plugin project for a player-driven Minecraft buy-order marketplace. It targets Minecraft 1.21.11 and Java 21, uses Vault for economy and SQLite for persistence.
+SuperOrders is a Java plugin project for a player-driven Minecraft buy-order marketplace, targeting Paper/Purpur 1.21.11 and Java 21. It uses Vault for economy and SQLite for durable data.
 
-## Build
-Install JDK 21 and Maven 3.9+, then run:
-
-```sh
-mvn clean package
-```
-
-The shaded plugin JAR will be in `target/`. Install Vault and a compatible economy plugin on your server, put the SuperOrders JAR in `plugins/`, and restart.
+## Build and install
+1. Install JDK 21 and Maven 3.9 or newer.
+2. Run `mvn clean package` from the project root.
+3. Copy the shaded JAR from `target/` into the server's `plugins/` folder.
+4. Install Vault and a compatible economy provider, then restart the server.
+5. Review `plugins/SuperOrders/config.yml`, `messages.yml`, and `gui.yml`.
 
 ## Commands
-- `/orders` or `/orders market` — marketplace
-- `/orders create` — create an order
-- `/orders mine` — own orders
-- `/orders history` — history
-- `/orders help` — help
-- `/orders admin reload` — reload supported configuration
-- `/orders admin debug` — diagnostics
+- `/orders` or `/orders market` — open marketplace.
+- `/orders create` — create an order using validated chat prompts.
+- `/orders mine` — list your orders.
+- `/orders cancel <id>` — cancel your active order and request unused escrow back.
+- `/orders history` — show recent transaction journal entries.
+- `/orders help` — help.
+- `/orders admin reload` — reload config.
+- `/orders admin inspect <id>` — inspect persisted order state.
+- `/orders admin cancel <id>` — administrator cancellation.
+- `/orders admin recover` — inspect pending refund obligations.
+- `/orders admin debug` — diagnostics.
 
 ## Permissions
-See `plugin.yml`. Administrative permissions default to operators.
+Player permissions are declared in `src/main/resources/plugin.yml`. Admin permissions default to operators. Grant only the specific admin permission needed.
 
-## Financial safety
-Vault and SQLite do not share a distributed transaction. A production marketplace must persist transaction intent before economy or inventory side effects and reconcile uncertain outcomes instead of blindly retrying. Test on a staging server with backups before using real player balances.
+## Transaction safety and current limitations
+The plugin writes transaction journal entries before escrow withdrawal and delivery payout attempts. Delivery transactions are serialized per order; unresolved payout states lock an order to prevent blind duplicate payouts. Cancellation and expiration record refund obligations durably before attempting the refund. Vault and SQLite do not share an atomic transaction, so ambiguous outcomes require manual review and must not be blindly retried.
 
-## Status
-This project is under active implementation. A successful Maven build is not proof of in-game transaction safety; validate the complete lifecycle on a staging server before production use.
+**This branch is still under development and is not production-ready.** Delivery currently uses chat quantity confirmation and plain matching item stacks, not a deposit-slot delivery GUI. Full crash-time item restoration, automated reconciliation of ambiguous Vault outcomes, refund obligation processing UI, complete pagination/search/sort/filter GUIs, PlaceholderAPI, complete admin refund/recovery tools, and full automated integration tests are not finished. Do not use it with real player balances until those gaps are addressed and the full lifecycle has been compiled and tested on a staging server.
+
+## Testing
+An initial unit test covers order quantity arithmetic. No build or in-game test has yet been run from this development environment; do not interpret the presence of source files as a passing build.
