@@ -9,7 +9,7 @@ softdepend: [PlaceholderAPI]
 commands:
   orders:
     description: Open the SuperOrders marketplace.
-    usage: /orders [market|create|mine|history|help|admin]
+    usage: /orders [market|create|mine|cancel|history|help|admin]
     aliases: [buyorders]
 permissions:
   superorders.use:
@@ -21,6 +21,8 @@ permissions:
   superorders.mine:
     default: true
   superorders.history:
+    default: true
+  superorders.cancel:
     default: true
   superorders.admin:
     default: op
