@@ -1,6 +1,6 @@
 # SuperOrders
 
-SuperOrders is a Java plugin project for a player-driven Minecraft buy-order marketplace, targeting Paper/Purpur 1.21.11 and Java 21. It uses Vault for economy and SQLite for durable data.
+SuperOrders is a Java plugin project for a player-driven Minecraft buy-order marketplace, targeting Paper/Purpur 1.21.11 and Java 21. It uses Vault for economy and YAML for durable data.
 
 ## Build and install
 1. Install JDK 21 and Maven 3.9 or newer.
@@ -41,7 +41,7 @@ Recovery guidance:
 - `ESCROW_WITHDRAW_PENDING` or `ESCROW_REFUND_PENDING`: inspect balance/provider history and order records before taking action. Never issue compensation unless the original withdrawal is confirmed.
 - `FAILED_REQUIRES_REVIEW`: item removal may have been partial or another step may have failed. Inspect the seller inventory and economy transaction history before attempting compensation; do not retry delivery blindly.
 
-Vault, Bukkit inventory changes, and SQLite cannot participate in one atomic transaction. Therefore no plugin can safely infer the outcome of every crash solely from its journal. Ambiguous states require manual reconciliation and may require the player to remain online for item restoration. This branch is still under development; automated tests cover repository state transitions but do not replace staging-server failure-injection tests. Back up the SQLite database before updating and test with non-production balances first.
+Vault, Bukkit inventory changes, and YAML cannot participate in one atomic transaction. Therefore no plugin can safely infer the outcome of every crash solely from its journal. Ambiguous states require manual reconciliation and may require the player to remain online for item restoration. This branch is still under development; automated tests cover repository state transitions but do not replace staging-server failure-injection tests. Back up the YAML storage before updating and test with non-production balances first.
  
 ## PlaceholderAPI
 When PlaceholderAPI is installed, SuperOrders registers the `superorders` expansion:
@@ -52,3 +52,10 @@ When PlaceholderAPI is installed, SuperOrders registers the `superorders` expans
 
 ## Testing
 GitHub Actions runs `mvn clean verify` on Java 21 and uploads the built plugin JAR when successful. A passing CI build confirms compilation and automated tests, but does not replace in-game testing against the target Paper/Purpur version and the server's actual Vault economy provider.
+
+
+## YAML-only storage
+
+SuperOrders stores its persistent data in `plugins/SuperOrders/orders.yml`. No SQLite or MySQL database is required, and the SQLite JDBC library is not included in the plugin build. Orders, transaction history, and recovery obligations are written to YAML with a temporary-file save and replacement strategy.
+
+**Back up `orders.yml` before upgrading.** This version uses a new YAML storage file and does not automatically import an existing `orders.db`. If you have existing orders or unresolved refunds in the old database, keep the old file untouched and migrate/reconcile it before removing it. Do not delete the old database until its contents have been safely accounted for.
