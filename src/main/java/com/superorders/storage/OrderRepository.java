@@ -98,6 +98,9 @@ public final class OrderRepository implements AutoCloseable {
     public synchronized void markRefundObligation(String id, String state) throws SQLException {
         try(PreparedStatement p=connection.prepareStatement("UPDATE recovery_obligations SET state=? WHERE obligation_id=? AND state='PENDING'")) { p.setString(1,state);p.setString(2,id);p.executeUpdate(); }
     }
+    public synchronized int pendingTransactionCount() throws SQLException {
+        try(PreparedStatement p=connection.prepareStatement("SELECT COUNT(*) FROM order_transactions WHERE state IN ('ESCROW_WITHDRAW_PENDING','ITEMS_RESERVED','PAYMENT_PENDING','FAILED_REQUIRES_REVIEW')");ResultSet r=p.executeQuery()){return r.next()?r.getInt(1):0;}
+    }
     public synchronized int pendingRefundCount() throws SQLException {
         try (PreparedStatement p=connection.prepareStatement("SELECT COUNT(*) FROM recovery_obligations WHERE state=?")) { p.setString(1,"PENDING"); try(ResultSet r=p.executeQuery()){return r.next()?r.getInt(1):0;} }
     }
