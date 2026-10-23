@@ -37,6 +37,30 @@ public final class MarketInventoryListener implements Listener {
         var lore=item.getItemMeta().lore();if(lore==null)return;
         for(var line:lore){String plain=net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(line);if(plain.startsWith("Order #"))try{beginDelivery(p,Long.parseLong(plain.substring(7)));return;}catch(NumberFormatException ignored){}}
     }
+    @EventHandler public void onManageClick(InventoryClickEvent e) {
+        if (!(e.getWhoClicked() instanceof Player p)
+                || !(e.getView().getTopInventory().getHolder() instanceof ManageHolder holder)) return;
+        e.setCancelled(true);
+        if (e.getClickedInventory() != e.getView().getTopInventory()) return;
+        ItemStack item=e.getCurrentItem();
+        if(item==null||item.getType().isAir()||!item.hasItemMeta()||item.getItemMeta().lore()==null)return;
+        for(var line:item.getItemMeta().lore()) {
+            String plain=net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(line);
+            if(!plain.startsWith("Order #"))continue;
+            try {
+                long id=Long.parseLong(plain.substring(7));
+                BuyOrder order=plugin.repository().find(id);
+                if(order==null||!order.ownerId().equals(p.getUniqueId())){p.sendMessage("That order is no longer yours.");return;}
+                if(order.status()!=OrderStatus.ACTIVE){p.sendMessage("Order #"+id+" is "+order.status()+".");return;}
+                inputs.put(p.getUniqueId(),new InputState("cancel-order-confirm",null,id,0,0,System.currentTimeMillis()+60_000));
+                p.closeInventory();
+                p.sendMessage("Cancel order #"+id+" and refund its remaining escrow? Type confirm or cancel. Do not type confirm if you do not want to cancel.");
+                return;
+            } catch(NumberFormatException ignored) { }
+            catch(Exception ex){p.sendMessage("Could not inspect that order.");return;}
+        }
+    }
+
     @EventHandler public void onDeliveryClick(InventoryClickEvent e) {
         if (!(e.getWhoClicked() instanceof Player p)
                 || !(e.getView().getTopInventory().getHolder() instanceof DeliveryHolder holder)) return;
@@ -90,6 +114,31 @@ public final class MarketInventoryListener implements Listener {
             p.openInventory(inv);
         } catch(Exception ex){plugin.getLogger().severe("Marketplace query failed: "+ex.getMessage());p.sendMessage("Marketplace could not be loaded.");}
     }
+    public void openMine(Player p) {
+        try {
+            List<BuyOrder> list=plugin.repository().ordersFor(p.getUniqueId());
+            int size=54;
+            Inventory inv=Bukkit.createInventory(new ManageHolder(p.getUniqueId()),size,mm.deserialize("<dark_purple>Your SuperOrders</dark_purple>"));
+            int slot=0;
+            for(BuyOrder o:list) {
+                if(slot>=45)break;
+                ItemStack icon=new ItemStack(o.material());
+                ItemMeta meta=icon.getItemMeta();
+                meta.displayName(mm.deserialize("<light_purple>Order #"+o.id()+" - "+o.material().name().replace('_',' ')+"</light_purple>"));
+                meta.lore(List.of(mm.deserialize("<gray>Status: <white>"+o.status()),
+                        mm.deserialize("<gray>Remaining: <white>"+o.remainingQuantity()+"/"+o.originalQuantity()),
+                        mm.deserialize("<gray>Price each: <white>"+o.unitPrice()),
+                        mm.deserialize("<gray>Escrow: <white>"+o.remainingEscrow()),
+                        mm.deserialize("<yellow>Order #"+o.id()),
+                        mm.deserialize(o.status()==OrderStatus.ACTIVE?"<red>Click to cancel and refund remaining escrow":"<gray>This order is not active")));
+                icon.setItemMeta(meta);
+                inv.setItem(slot++,icon);
+            }
+            if(list.isEmpty())inv.setItem(22,named(Material.PAPER,"<gray>You have not created any orders yet"));
+            p.openInventory(inv);
+        } catch(Exception ex){plugin.getLogger().warning("Could not load player orders: "+ex.getMessage());p.sendMessage("Could not load your orders.");}
+    }
+
     public void beginCreate(Player p){inputs.put(p.getUniqueId(),new InputState("material",null,0,0,0,System.currentTimeMillis()+60_000));p.sendMessage("Type the item material (e.g. DIAMOND), or cancel:");}
     private void beginDelivery(Player p,long id){
         try {
@@ -121,11 +170,13 @@ public final class MarketInventoryListener implements Listener {
             case "confirm"->{if(!msg.equalsIgnoreCase("confirm"))throw new IllegalArgumentException("Type confirm or cancel.");long id=orders.create(p,s.material,s.quantity,s.price);inputs.remove(p.getUniqueId());p.sendMessage("Order #"+id+" created; escrow reserved.");}
             case "deliver-quantity"->{int q=Integer.parseInt(msg);if(q<1)throw new IllegalArgumentException("Quantity must be positive.");BuyOrder o=plugin.repository().find(s.orderId);if(o==null||o.status()!=OrderStatus.ACTIVE||q>o.remainingQuantity())throw new IllegalArgumentException("Order changed or quantity exceeds remaining amount.");double total=o.unitPrice()*q;p.sendMessage("Deliver "+q+" "+o.material()+" for $"+total+"? Make sure the items are in your inventory. Type confirm or cancel.");inputs.put(p.getUniqueId(),new InputState("deliver-confirm",s.material,s.orderId,q,total,s.deadline));}
             case "deliver-confirm"->{if(!msg.equalsIgnoreCase("confirm"))throw new IllegalArgumentException("Type confirm or cancel.");inputs.remove(p.getUniqueId());plugin.deliveryService().deliver(p,s.orderId,s.quantity); }
+            case "cancel-order-confirm"->{if(!msg.equalsIgnoreCase("confirm"))throw new IllegalArgumentException("Type confirm or cancel.");inputs.remove(p.getUniqueId());plugin.orderService().cancel(p,s.orderId,false);p.sendMessage("Order #"+s.orderId+" cancelled. Any unconfirmed refund is recorded for administrator review.");}
             default->{inputs.remove(p.getUniqueId());p.sendMessage("That operation is not available.");}
         }}catch(Exception ex){p.sendMessage("SuperOrders: "+(ex.getMessage()==null?"Input rejected.":ex.getMessage()));}
     }
     private ItemStack named(Material material,String title){ItemStack i=new ItemStack(material);ItemMeta m=i.getItemMeta();m.displayName(mm.deserialize(title));i.setItemMeta(m);return i;}
     private record InputState(String step,Material material,long orderId,int quantity,double price,long deadline){}
     private static final class MarketHolder implements InventoryHolder{private final int page;private MarketHolder(int page){this.page=page;}@Override public Inventory getInventory(){return null;}}
+    private static final class ManageHolder implements InventoryHolder{private final UUID ownerId;private ManageHolder(UUID ownerId){this.ownerId=ownerId;}@Override public Inventory getInventory(){return null;}}
     private static final class DeliveryHolder implements InventoryHolder{private final long orderId;private final Material material;private final int maxQuantity;private DeliveryHolder(long orderId,Material material,int maxQuantity){this.orderId=orderId;this.material=material;this.maxQuantity=maxQuantity;}@Override public Inventory getInventory(){return null;}}
 }
