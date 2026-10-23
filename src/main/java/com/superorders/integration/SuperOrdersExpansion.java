@@ -4,8 +4,6 @@ import com.superorders.SuperOrders;
 import com.superorders.model.OrderStatus;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import org.bukkit.OfflinePlayer;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 /** Optional PlaceholderAPI integration. */
 public final class SuperOrdersExpansion extends PlaceholderExpansion {
@@ -16,17 +14,17 @@ public final class SuperOrdersExpansion extends PlaceholderExpansion {
     }
 
     @Override
-    public @NotNull String getIdentifier() {
+    public String getIdentifier() {
         return "superorders";
     }
 
     @Override
-    public @NotNull String getAuthor() {
+    public String getAuthor() {
         return "univer404";
     }
 
     @Override
-    public @NotNull String getVersion() {
+    public String getVersion() {
         return plugin.getDescription().getVersion();
     }
 
@@ -36,7 +34,7 @@ public final class SuperOrdersExpansion extends PlaceholderExpansion {
     }
 
     @Override
-    public @Nullable String onRequest(OfflinePlayer player, @NotNull String params) {
+    public String onRequest(OfflinePlayer player, String params) {
         try {
             return switch (params.toLowerCase(java.util.Locale.ROOT)) {
                 case "active_orders" -> Integer.toString(plugin.repository().activeOrders().size());
