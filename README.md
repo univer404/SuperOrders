@@ -7,12 +7,11 @@ SuperOrders is a Java plugin project for a player-driven Minecraft buy-order mar
 2. Run `mvn clean package` from the project root.
 3. Copy the shaded JAR from `target/` into the server's `plugins/` folder.
 4. Install Vault and a compatible economy provider, then restart the server.
-5. Review `plugins/SuperOrders/config.yml`, `messages.yml`, and `gui.yml`.
+5. Review `plugins/SuperOrders/config.yml`, `messages.yml`, and `gui.yml`. The GUI file controls the marketplace title, size, and navigation slots.
 
 ## Commands
 - `/orders` or `/orders market` — open marketplace.
 - `/orders create` — create an order using validated chat prompts.
-- `/orders mine` — list your orders.
 - `/orders cancel <id>` — cancel your active order and request unused escrow back.
 - `/orders history` — open transaction history.
 - The marketplace GUI includes pagination, search by item/owner/order ID, and newest/lowest-price/highest-price sorting.
