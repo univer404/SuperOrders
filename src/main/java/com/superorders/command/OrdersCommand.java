@@ -39,6 +39,44 @@ public final class OrdersCommand implements CommandExecutor, TabCompleter {
                     sender.sendMessage("IMPORTANT: verify economy-provider history before manually paying or restoring anything. PROCESSING entries and ambiguous payouts must not be retried without reconciliation.");
                 } catch(Exception ex){sender.sendMessage("Recovery inspection failed: "+ex.getMessage());}
             }
+            else if(args.length>2&&args[1].equalsIgnoreCase("escrow-refund")) {
+                if(!sender.hasPermission("superorders.admin.recover")){msg(sender,"no-permission");return true;}
+                String transactionId=args[2];
+                try {
+                    var tx=plugin.repository().findTransaction(transactionId);
+                    if(tx==null){sender.sendMessage("Transaction not found: "+transactionId);return true;}
+                    if(!tx.state().equals("ESCROW_WITHDRAW_PENDING") && !tx.state().equals("FAILED_REQUIRES_REVIEW")) {
+                        sender.sendMessage("This action only applies to an unresolved order-creation escrow transaction. Current state: "+tx.state());
+                        return true;
+                    }
+                    if(tx.orderId()!=0) {
+                        sender.sendMessage("This transaction is linked to order #"+tx.orderId()+". Use the normal order recovery procedure instead.");
+                        return true;
+                    }
+                    java.util.UUID ownerId=java.util.UUID.fromString(tx.actorUuid());
+                    sender.sendMessage("DANGER: verify the economy provider history and confirm the original escrow withdrawal succeeded. Otherwise this refund could create money.");
+                    if(!plugin.repository().claimTransactionState(transactionId,tx.state(),"ESCROW_REFUND_PENDING","Administrator initiated manual escrow compensation. Payout outcome must be reconciled; do not retry blindly.")) {
+                        sender.sendMessage("Transaction state changed; inspect /orders admin recover.");
+                        return true;
+                    }
+                    try {
+                        var response=plugin.economy().depositPlayer(plugin.getServer().getOfflinePlayer(ownerId),tx.amount());
+                        if(response.transactionSuccess()) {
+                            plugin.repository().setTransactionState(transactionId,"ESCROW_REFUNDED_MANUALLY","Administrator confirmed original withdrawal and issued compensation. Verify economy history.");
+                            sender.sendMessage("Compensation reported successful. Verify provider history before considering this case closed.");
+                        } else {
+                            sender.sendMessage("Compensation was not confirmed. The transaction remains ESCROW_REFUND_PENDING; do not retry until provider history is reconciled.");
+                            plugin.getLogger().severe("Escrow compensation not confirmed for "+transactionId+"; manual reconciliation required.");
+                        }
+                    } catch(Exception payoutError) {
+                        sender.sendMessage("Compensation outcome is uncertain. Transaction remains ESCROW_REFUND_PENDING; do not retry until provider history is checked.");
+                        plugin.getLogger().severe("Escrow compensation outcome uncertain for "+transactionId+": "+payoutError.getMessage());
+                    }
+                } catch(Exception ex) {
+                    sender.sendMessage("Escrow recovery failed: "+ex.getMessage());
+                    plugin.getLogger().severe("Escrow recovery failed for "+transactionId+": "+ex.getMessage());
+                }
+            }
             else if(args.length>3&&args[1].equalsIgnoreCase("resolve")) {
                 if(!sender.hasPermission("superorders.admin.recover")){msg(sender,"no-permission");return true;}
                 String transactionId=args[2];
@@ -113,7 +151,7 @@ public final class OrdersCommand implements CommandExecutor, TabCompleter {
                     }
                 } catch(Exception ex){sender.sendMessage("Refund processing failed: "+ex.getMessage());}
             }
-            else sender.sendMessage("Admin: /orders admin reload|inspect <id>|cancel <id>|recover|resolve <transaction-id> <paid|restore>|refund <obligation-id>|debug");return true;}
+            else sender.sendMessage("Admin: /orders admin reload|inspect <id>|cancel <id>|recover|resolve <transaction-id> <paid|restore>|escrow-refund <transaction-id>|refund <obligation-id>|debug");return true;}
         if(!(sender instanceof Player player)){msg(sender,"player-only");return true;}if(!player.hasPermission("superorders.use")){msg(player,"no-permission");return true;}
         String sub=args.length==0?"market":args[0].toLowerCase(Locale.ROOT);switch(sub){case "market"->{if(!player.hasPermission("superorders.market")){msg(player,"no-permission");}else openMarket(player);}case "create"->{if(!player.hasPermission("superorders.create")){msg(player,"no-permission");}else{plugin.marketListener().beginCreate(player);}}case "mine"->{if(!player.hasPermission("superorders.mine")){msg(player,"no-permission");}else plugin.marketListener().openMine(player);}case "history"->{if(!player.hasPermission("superorders.history")){msg(player,"no-permission");}else plugin.marketListener().openHistory(player);}case "cancel"->{if(!player.hasPermission("superorders.cancel")){msg(player,"no-permission");}else if(args.length<2){player.sendMessage("Usage: /orders cancel <orderId>");}else try{long id=Long.parseLong(args[1]);plugin.orderService().cancel(player,id,false);player.sendMessage("Order #"+id+" cancelled.");}catch(Exception ex){player.sendMessage("Could not cancel order: "+ex.getMessage());}}case "help"->player.sendMessage(mm.deserialize("<gold>SuperOrders: /orders, /orders create, /orders mine, /orders cancel <id>, /orders history"));default->{if(!player.hasPermission("superorders.market"))msg(player,"no-permission");else openMarket(player);}}return true;
     }
