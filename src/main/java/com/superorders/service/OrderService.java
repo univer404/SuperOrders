@@ -62,6 +62,7 @@ public final class OrderService {
         try {
             BuyOrder order = plugin.repository().find(orderId);
             if (order == null || order.status() != OrderStatus.ACTIVE) throw new IllegalArgumentException("That order is not active.");
+            if (plugin.repository().hasUnresolvedDelivery(orderId)) throw new IllegalStateException("This order has an interrupted delivery. An administrator must resolve it before cancellation.");
             if (!admin && !order.ownerId().equals(actor.getUniqueId())) throw new IllegalArgumentException("You do not own that order.");
             double refundAmount = order.remainingEscrow();
             String obligation = plugin.repository().cancelAndRecordRefund(orderId, OrderStatus.CANCELLED, order.ownerId(), refundAmount, "Order cancellation #" + orderId);
@@ -82,6 +83,10 @@ public final class OrderService {
                 try {
                     BuyOrder current = plugin.repository().find(order.id());
                     if (current == null || current.status() != OrderStatus.ACTIVE || current.expiresAt() > System.currentTimeMillis()) continue;
+                    if (plugin.repository().hasUnresolvedDelivery(current.id())) {
+                        plugin.getLogger().warning("Skipping expiration/refund for order #"+current.id()+" because a delivery transaction needs recovery.");
+                        continue;
+                    }
                     String obligation = plugin.repository().cancelAndRecordRefund(current.id(), OrderStatus.EXPIRED, current.ownerId(), current.remainingEscrow(), "Expired order #" + current.id());
                     if (current.remainingEscrow() > 0) {
                         var response = plugin.economy().depositPlayer(plugin.getServer().getOfflinePlayer(current.ownerId()), current.remainingEscrow());
