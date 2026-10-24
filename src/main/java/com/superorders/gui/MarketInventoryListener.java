@@ -77,13 +77,13 @@ public final class MarketInventoryListener implements Listener {
         e.setCancelled(true);
         if (e.getClickedInventory() != e.getView().getTopInventory()) return;
         int slot = e.getRawSlot();
-        if (slot == guiInt("delivery.cancel-slot",26)) {
+        if (slot == guiSlot("delivery.cancel-slot",26,inv.getSize())) {
             p.closeInventory();
             return;
         }
-        if(slot==guiInt("delivery.decrease-slot",10)){openDelivery(p,holder.orderId,holder.material,holder.maxQuantity,Math.max(1,holder.quantity-1));return;}
-        if(slot==guiInt("delivery.increase-slot",16)){openDelivery(p,holder.orderId,holder.material,holder.maxQuantity,Math.min(holder.maxQuantity,holder.quantity+1));return;}
-        if(slot==guiInt("delivery.continue-slot",22)){
+        if(slot==guiSlot("delivery.decrease-slot",10,inv.getSize())){openDelivery(p,holder.orderId,holder.material,holder.maxQuantity,Math.max(1,holder.quantity-1));return;}
+        if(slot==guiSlot("delivery.increase-slot",16,inv.getSize())){openDelivery(p,holder.orderId,holder.material,holder.maxQuantity,Math.min(holder.maxQuantity,holder.quantity+1));return;}
+        if(slot==guiSlot("delivery.continue-slot",22,inv.getSize())){
             BuyOrder order=findOrderQuietly(holder.orderId);
             if(order==null||order.status()!=OrderStatus.ACTIVE||holder.quantity>order.remainingQuantity()){p.sendMessage("Order changed. Reopen the marketplace and try again.");p.closeInventory();return;}
             double total=order.unitPrice()*holder.quantity;
@@ -151,13 +151,14 @@ public final class MarketInventoryListener implements Listener {
             Inventory inv=Bukkit.createInventory(new HistoryHolder(),guiSize("history",54),text(guiString("history.title","<dark_gray>Orders History</dark_gray>")));
             int slot=0;
             for(var record:records) {
+                if (slot >= inv.getSize()) break;
                 Map<String,String> values=Map.of("%state%",record.state(),"%order_id%",String.valueOf(record.orderId()),
                         "%quantity%",String.valueOf(record.quantity()),"%amount%",String.valueOf(record.amount()),"%actor%",String.valueOf(record.actorUuid()),
                         "%time%",String.valueOf(java.time.Instant.ofEpochMilli(record.createdAt())),"%transaction_id%",record.transactionId(),"%details%",record.details());
                 ItemStack icon=configuredItem("history.item",Material.PAPER,"<light_purple>%state%</light_purple>",values);
                 inv.setItem(slot++,icon);
             }
-            if(records.isEmpty())inv.setItem(guiInt("history.empty.slot",22),configuredItem("history.empty",Material.PAPER,"<gray>No transactions recorded",Map.of()));
+            if(records.isEmpty())inv.setItem(guiSlot("history.empty.slot",22,inv.getSize()),configuredItem("history.empty",Material.PAPER,"<gray>No transactions recorded",Map.of()));
             p.openInventory(inv);
         } catch(Exception ex){plugin.getLogger().warning("Could not load transaction history: "+ex.getMessage());p.sendMessage("Could not load transaction history.");}
     }
@@ -166,10 +167,11 @@ public final class MarketInventoryListener implements Listener {
         try {
             List<BuyOrder> list=plugin.repository().ordersFor(p.getUniqueId());
             int size=guiSize("mine",54);
+            int configuredContentSlots=Math.max(1,Math.min(guiInt("mine.content-slots",45),size-9));
             Inventory inv=Bukkit.createInventory(new ManageHolder(p.getUniqueId()),size,text(guiString("mine.title","<dark_gray>My Buy Orders</dark_gray>")));
             int slot=0;
             for(BuyOrder o:list) {
-                if(slot>=guiInt("mine.content-slots",45)||slot>=size)break;
+                if(slot>=configuredContentSlots||slot>=size-9)break;
                 Map<String,String> values=Map.of("%order_id%",String.valueOf(o.id()),"%material%",o.material().name().replace('_',' '),
                         "%status%",String.valueOf(o.status()),"%remaining%",String.valueOf(o.remainingQuantity()),"%original%",String.valueOf(o.originalQuantity()),
                         "%unit_price%",String.valueOf(o.unitPrice()),"%escrow%",String.valueOf(o.remainingEscrow()),
@@ -177,7 +179,7 @@ public final class MarketInventoryListener implements Listener {
                 ItemStack icon=configuredItem("mine.item",o.material(),"<light_purple>Order #%order_id% - %material%</light_purple>",values);
                 inv.setItem(slot++,icon);
             }
-            if(list.isEmpty())inv.setItem(guiInt("mine.empty.slot",22),configuredItem("mine.empty",Material.PAPER,"<gray>You have not created any orders yet",Map.of()));
+            if(list.isEmpty())inv.setItem(guiSlot("mine.empty.slot",22,inv.getSize()),configuredItem("mine.empty",Material.PAPER,"<gray>You have not created any orders yet",Map.of()));
             p.openInventory(inv);
         } catch(Exception ex){plugin.getLogger().warning("Could not load player orders: "+ex.getMessage());p.sendMessage("Could not load your orders.");}
     }
@@ -189,7 +191,7 @@ public final class MarketInventoryListener implements Listener {
         Inventory inv=Bukkit.createInventory(new CreateHolder("picker",page,null,16,1.0),guiSize("picker",54),text(guiString("picker.title","<dark_gray>Select Item</dark_gray>")));
         int start=page*perPage,end=Math.min(materials.size(),start+perPage);
         for(int i=start;i<end;i++){Material material=materials.get(i);ItemStack icon=configuredItem("picker.item",material,"<light_purple>%material%</light_purple>",Map.of("%material%",material.name().replace('_',' ')));inv.setItem(i-start,icon);}
-        int previous=guiInt("picker.previous-slot",45), cancel=guiInt("picker.cancel-slot",49), next=guiInt("picker.next-slot",53);
+        int previous=guiSlot("picker.previous-slot",45,e.getView().getTopInventory().getSize()), cancel=guiSlot("picker.cancel-slot",49,e.getView().getTopInventory().getSize()), next=guiSlot("picker.next-slot",53,e.getView().getTopInventory().getSize());
         if(page>0&&previous>=0&&previous<inv.getSize())inv.setItem(previous,configuredItem("picker.previous",Material.ARROW,"<yellow>Previous Items",Map.of()));
         if(cancel>=0&&cancel<inv.getSize())inv.setItem(cancel,configuredItem("picker.cancel",Material.BARRIER,"<red>Cancel",Map.of()));
         if(page<maxPage&&next>=0&&next<inv.getSize())inv.setItem(next,configuredItem("picker.next",Material.ARROW,"<yellow>Next Items",Map.of()));
@@ -197,15 +199,15 @@ public final class MarketInventoryListener implements Listener {
     }
     private void openCreateSettings(Player p,Material material,int quantity,double price){
         Inventory inv=Bukkit.createInventory(new CreateHolder("settings",0,material,quantity,price),guiSize("create",27),text(guiString("create.title","<dark_gray>Configure Order</dark_gray>")));
-        inv.setItem(guiInt("create.item-slot",4),configuredItem("create.item",material,"<light_purple>%material%</light_purple>",Map.of("%material%",material.name().replace('_',' '))));
-        inv.setItem(guiInt("create.decrease-quantity-slot",10),configuredItem("create.decrease-quantity",Material.REDSTONE,"<red>Decrease Quantity",Map.of()));
-        inv.setItem(guiInt("create.increase-quantity-slot",11),configuredItem("create.increase-quantity",Material.LIME_DYE,"<green>Increase Quantity",Map.of()));
-        inv.setItem(guiInt("create.quantity-slot",13),configuredItem("create.quantity",Material.PAPER,"<yellow>Quantity: %quantity%<gray> (click +/-)",Map.of("%quantity%",String.valueOf(quantity))));
-        inv.setItem(guiInt("create.decrease-price-slot",15),configuredItem("create.decrease-price",Material.GOLD_NUGGET,"<red>Lower Unit Price",Map.of()));
-        inv.setItem(guiInt("create.increase-price-slot",16),configuredItem("create.increase-price",Material.GOLD_INGOT,"<green>Raise Unit Price",Map.of()));
-        inv.setItem(guiInt("create.confirm-slot",22),configuredItem("create.confirm",Material.EMERALD,"<green>Confirm Order",Map.of()));
-        inv.setItem(guiInt("create.cancel-slot",26),configuredItem("create.cancel",Material.BARRIER,"<red>Cancel",Map.of()));
-        ItemStack priceInfo=configuredItem("create.price-info",Material.GOLD_INGOT,"<yellow>Unit price: %price%",Map.of("%price%",String.valueOf(price),"%total%",String.valueOf(quantity*price)));inv.setItem(guiInt("create.price-info-slot",14),priceInfo);
+        inv.setItem(guiSlot("create.item-slot",4,inv.getSize()),configuredItem("create.item",material,"<light_purple>%material%</light_purple>",Map.of("%material%",material.name().replace('_',' '))));
+        inv.setItem(guiSlot("create.decrease-quantity-slot",10,inv.getSize()),configuredItem("create.decrease-quantity",Material.REDSTONE,"<red>Decrease Quantity",Map.of()));
+        inv.setItem(guiSlot("create.increase-quantity-slot",11,inv.getSize()),configuredItem("create.increase-quantity",Material.LIME_DYE,"<green>Increase Quantity",Map.of()));
+        inv.setItem(guiSlot("create.quantity-slot",13,inv.getSize()),configuredItem("create.quantity",Material.PAPER,"<yellow>Quantity: %quantity%<gray> (click +/-)",Map.of("%quantity%",String.valueOf(quantity))));
+        inv.setItem(guiSlot("create.decrease-price-slot",15,inv.getSize()),configuredItem("create.decrease-price",Material.GOLD_NUGGET,"<red>Lower Unit Price",Map.of()));
+        inv.setItem(guiSlot("create.increase-price-slot",16,inv.getSize()),configuredItem("create.increase-price",Material.GOLD_INGOT,"<green>Raise Unit Price",Map.of()));
+        inv.setItem(guiSlot("create.confirm-slot",22,inv.getSize()),configuredItem("create.confirm",Material.EMERALD,"<green>Confirm Order",Map.of()));
+        inv.setItem(guiSlot("create.cancel-slot",26,inv.getSize()),configuredItem("create.cancel",Material.BARRIER,"<red>Cancel",Map.of()));
+        ItemStack priceInfo=configuredItem("create.price-info",Material.GOLD_INGOT,"<yellow>Unit price: %price%",Map.of("%price%",String.valueOf(price),"%total%",String.valueOf(quantity*price)));inv.setItem(guiSlot("create.price-info-slot",14,inv.getSize()),priceInfo);
         p.openInventory(inv);
     }
     @EventHandler public void onCreateClick(InventoryClickEvent e){
@@ -219,15 +221,15 @@ public final class MarketInventoryListener implements Listener {
             ItemStack selected=e.getCurrentItem();if(selected==null||selected.getType().isAir()||!selected.getType().isItem())return;
             openCreateSettings(p,selected.getType(),16,plugin.getConfig().getDouble("orders.min-unit-price",0.01));return;
         }
-        if(slot==guiInt("create.cancel-slot",26)){p.closeInventory();p.sendMessage("Order creation cancelled.");return;}
+        if(slot==guiSlot("create.cancel-slot",26,e.getView().getTopInventory().getSize())){p.closeInventory();p.sendMessage("Order creation cancelled.");return;}
         int quantity=holder.quantity;double price=holder.price;
         int max=plugin.getConfig().getInt("orders.max-quantity",23040);
         double step=plugin.getConfig().getDouble("orders.gui-price-step",1.0);
-        if(slot==guiInt("create.decrease-quantity-slot",10))quantity=Math.max(1,quantity-1);
-        else if(slot==guiInt("create.increase-quantity-slot",11))quantity=Math.min(max,quantity+1);
-        else if(slot==guiInt("create.decrease-price-slot",15))price=Math.max(plugin.getConfig().getDouble("orders.min-unit-price",0.01),Math.round((price-step)*100.0)/100.0);
-        else if(slot==guiInt("create.increase-price-slot",16))price=Math.min(plugin.getConfig().getDouble("orders.max-unit-price",1_000_000_000.0),Math.round((price+step)*100.0)/100.0);
-        else if(slot==guiInt("create.confirm-slot",22)){
+        if(slot==guiSlot("create.decrease-quantity-slot",10,e.getView().getTopInventory().getSize()))quantity=Math.max(1,quantity-1);
+        else if(slot==guiSlot("create.increase-quantity-slot",11,e.getView().getTopInventory().getSize()))quantity=Math.min(max,quantity+1);
+        else if(slot==guiSlot("create.decrease-price-slot",15,e.getView().getTopInventory().getSize()))price=Math.max(plugin.getConfig().getDouble("orders.min-unit-price",0.01),Math.round((price-step)*100.0)/100.0);
+        else if(slot==guiSlot("create.increase-price-slot",16,e.getView().getTopInventory().getSize()))price=Math.min(plugin.getConfig().getDouble("orders.max-unit-price",1_000_000_000.0),Math.round((price+step)*100.0)/100.0);
+        else if(slot==guiSlot("create.confirm-slot",22,e.getView().getTopInventory().getSize())){
             try{long id=orders.create(p,holder.material,holder.quantity,holder.price);p.closeInventory();p.sendMessage("Order #"+id+" created; escrow reserved.");}
             catch(Exception ex){p.sendMessage("SuperOrders: "+(ex.getMessage()==null?"Could not create order.":ex.getMessage()));}
             return;
@@ -253,12 +255,12 @@ public final class MarketInventoryListener implements Listener {
         int safeQuantity=Math.max(1,Math.min(quantity,safeMax));
         Inventory inv=Bukkit.createInventory(new DeliveryHolder(id,material,safeMax,safeQuantity),guiSize("delivery",27),text(guiString("delivery.title","<dark_gray>Deliver to Order #%order_id%</dark_gray>").replace("%order_id%",String.valueOf(id))));
         Map<String,String> values=Map.of("%material%",material.name().replace('_',' '),"%requested%",String.valueOf(order.remainingQuantity()),"%quantity%",String.valueOf(safeQuantity),"%unit_price%",String.valueOf(order.unitPrice()),"%payout%",String.valueOf(order.unitPrice()*safeQuantity));
-        inv.setItem(guiInt("delivery.info-slot",13),configuredItem("delivery.info",material,"<light_purple>%material%</light_purple>",values));
-        inv.setItem(guiInt("delivery.decrease-slot",10),configuredItem("delivery.decrease",Material.REDSTONE,"<red>Decrease quantity",Map.of()));
-        inv.setItem(guiInt("delivery.quantity-slot",11),configuredItem("delivery.quantity",Material.PAPER,"<yellow>Selected: %quantity%",values));
-        inv.setItem(guiInt("delivery.increase-slot",16),configuredItem("delivery.increase",Material.LIME_DYE,"<green>Increase quantity",Map.of()));
-        inv.setItem(guiInt("delivery.continue-slot",22),configuredItem("delivery.continue",Material.EMERALD,"<green>Continue",Map.of()));
-        inv.setItem(guiInt("delivery.cancel-slot",26),configuredItem("delivery.cancel",Material.BARRIER,"<red>Cancel",Map.of()));
+        inv.setItem(guiSlot("delivery.info-slot",13,inv.getSize()),configuredItem("delivery.info",material,"<light_purple>%material%</light_purple>",values));
+        inv.setItem(guiSlot("delivery.decrease-slot",10,e.getView().getTopInventory().getSize()),configuredItem("delivery.decrease",Material.REDSTONE,"<red>Decrease quantity",Map.of()));
+        inv.setItem(guiSlot("delivery.quantity-slot",11,inv.getSize()),configuredItem("delivery.quantity",Material.PAPER,"<yellow>Selected: %quantity%",values));
+        inv.setItem(guiSlot("delivery.increase-slot",16,e.getView().getTopInventory().getSize()),configuredItem("delivery.increase",Material.LIME_DYE,"<green>Increase quantity",Map.of()));
+        inv.setItem(guiSlot("delivery.continue-slot",22,e.getView().getTopInventory().getSize()),configuredItem("delivery.continue",Material.EMERALD,"<green>Continue",Map.of()));
+        inv.setItem(guiSlot("delivery.cancel-slot",26,e.getView().getTopInventory().getSize()),configuredItem("delivery.cancel",Material.BARRIER,"<red>Cancel",Map.of()));
         p.openInventory(inv);
     }
     @EventHandler public void onChat(AsyncPlayerChatEvent e){Player p=e.getPlayer();InputState s=inputs.get(p.getUniqueId());if(s==null)return;e.setCancelled(true);String msg=e.getMessage().trim();Bukkit.getScheduler().runTask(plugin,()->process(p,s,msg));}
@@ -284,6 +286,7 @@ public final class MarketInventoryListener implements Listener {
     private String guiString(String path,String fallback){return plugin.guiConfig().getString(path,fallback);}
     private int guiInt(String path,int fallback){return plugin.guiConfig().getInt(path,fallback);}
     private int guiSize(String path,int fallback){int size=guiInt(path+".size",fallback);return size>=9&&size<=54&&size%9==0?size:fallback;}
+    private int guiSlot(String path,int fallback,int size){int slot=guiInt(path,fallback);return slot>=0&&slot<size?slot:fallback>=0&&fallback<size?fallback:Math.max(0,size-1);}
     private Material guiMaterial(String path,Material fallback){Material material=Material.matchMaterial(guiString(path,fallback.name()));return material==null||!material.isItem()?fallback:material;}
     private ItemStack configuredItem(String path,Material fallback,String fallbackName,Map<String,String> replacements){
         Material material=guiMaterial(path+".material",fallback);ItemStack item=new ItemStack(material);ItemMeta meta=item.getItemMeta();
