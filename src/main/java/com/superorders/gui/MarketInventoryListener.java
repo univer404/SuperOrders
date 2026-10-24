@@ -77,13 +77,13 @@ public final class MarketInventoryListener implements Listener {
         e.setCancelled(true);
         if (e.getClickedInventory() != e.getView().getTopInventory()) return;
         int slot = e.getRawSlot();
-        if (slot == 26) {
+        if (slot == guiInt("delivery.cancel-slot",26)) {
             p.closeInventory();
             return;
         }
-        if(slot==10){openDelivery(p,holder.orderId,holder.material,holder.maxQuantity,Math.max(1,holder.quantity-1));return;}
-        if(slot==16){openDelivery(p,holder.orderId,holder.material,holder.maxQuantity,Math.min(holder.maxQuantity,holder.quantity+1));return;}
-        if(slot==22){
+        if(slot==guiInt("delivery.decrease-slot",10)){openDelivery(p,holder.orderId,holder.material,holder.maxQuantity,Math.max(1,holder.quantity-1));return;}
+        if(slot==guiInt("delivery.increase-slot",16)){openDelivery(p,holder.orderId,holder.material,holder.maxQuantity,Math.min(holder.maxQuantity,holder.quantity+1));return;}
+        if(slot==guiInt("delivery.continue-slot",22)){
             BuyOrder order=findOrderQuietly(holder.orderId);
             if(order==null||order.status()!=OrderStatus.ACTIVE||holder.quantity>order.remainingQuantity()){p.sendMessage("Order changed. Reopen the marketplace and try again.");p.closeInventory();return;}
             double total=order.unitPrice()*holder.quantity;
@@ -116,32 +116,26 @@ public final class MarketInventoryListener implements Listener {
             Inventory inv=Bukkit.createInventory(new MarketHolder(page,normalized,sort),size,
                     text(guiString("marketplace.title","<dark_purple>SuperOrders</dark_purple>")));
             // Keep the marketplace visually organized: a compact item grid above a dedicated control bar.
-            for(int i=contentSlots;i<size;i++) inv.setItem(i,configuredItem("filler",Material.GRAY_STAINED_GLASS_PANE,"<dark_gray> ",Map.of()));
+            for(int i=contentSlots;i<size;i++) inv.setItem(i,configuredItem("marketplace.filler",Material.GRAY_STAINED_GLASS_PANE,"<dark_gray> ",Map.of()));
             int start=page*contentSlots;
             int end=Math.min(list.size(),start+contentSlots);
             int slot=0;
             for(int index=start;index<end;index++){
                 BuyOrder o=list.get(index);
-                ItemStack icon=new ItemStack(o.material());
-                ItemMeta m=icon.getItemMeta();
                 Map<String,String> values=Map.of("%material%",o.material().name().replace('_',' '),"%owner%",o.ownerName(),
                         "%remaining%",String.valueOf(o.remainingQuantity()),"%unit_price%",String.valueOf(o.unitPrice()),
                         "%order_value%",String.valueOf(o.remainingValue()),"%order_id%",String.valueOf(o.id()));
-                ItemStack configured = configuredItem("order-item",o.material(),"<aqua><bold>%material%</bold></aqua>",values);
-                ItemMeta configuredMeta=configured.getItemMeta();
-                if(configuredMeta!=null){configuredMeta.getPersistentDataContainer();configured.setItemMeta(configuredMeta);}
-                icon=configured; m=icon.getItemMeta();
-                icon.setItemMeta(m);
-                inv.setItem(slot++,icon);
+                ItemStack configured = configuredItem("marketplace.order-item",o.material(),"<aqua><bold>%material%</bold></aqua>",values);
+                inv.setItem(slot++,configured);
             }
             if(list.isEmpty())inv.setItem(size/2,configuredItem("marketplace.empty",Material.PAPER,normalized.isEmpty()?"<gray>No active orders":"<gray>No orders match your search",Map.of()));
-            if(page>0)inv.setItem(configuredSlot("previous-slot",size,9),named(Material.ARROW,"<yellow>Previous Page"));
-            inv.setItem(configuredSlot("search-slot",size,8),named(Material.COMPASS,"<aqua>Search"));
-            inv.setItem(configuredSlot("sort-slot",size,7),named(Material.HOPPER,"<aqua>Sort: "+sort.label));
-            inv.setItem(configuredSlot("create-slot",size,5),named(Material.EMERALD,"<green>Create Order"));
-            inv.setItem(configuredSlot("mine-slot",size,4),named(Material.BOOK,"<yellow>My Orders"));
-            inv.setItem(configuredSlot("history-slot",size,3),named(Material.WRITABLE_BOOK,"<yellow>History"));
-            if(page<maxPage)inv.setItem(configuredSlot("next-slot",size,1),named(Material.ARROW,"<yellow>Next Page"));
+            if(page>0)inv.setItem(configuredSlot("previous-slot",size,9),configuredItem("marketplace.buttons.previous",Material.ARROW,"<yellow>Previous Page",Map.of()));
+            inv.setItem(configuredSlot("search-slot",size,8),configuredItem("marketplace.buttons.search",Material.COMPASS,"<aqua>Search",Map.of()));
+            inv.setItem(configuredSlot("sort-slot",size,7),configuredItem("marketplace.buttons.sort",Material.HOPPER,"<aqua>Sort: %sort%",Map.of("%sort%",sort.label)));
+            inv.setItem(configuredSlot("create-slot",size,5),configuredItem("marketplace.buttons.create",Material.EMERALD,"<green>Create Order",Map.of()));
+            inv.setItem(configuredSlot("mine-slot",size,4),configuredItem("marketplace.buttons.mine",Material.BOOK,"<yellow>My Orders",Map.of()));
+            inv.setItem(configuredSlot("history-slot",size,3),configuredItem("marketplace.buttons.history",Material.WRITABLE_BOOK,"<yellow>History",Map.of()));
+            if(page<maxPage)inv.setItem(configuredSlot("next-slot",size,1),configuredItem("marketplace.buttons.next",Material.ARROW,"<yellow>Next Page",Map.of()));
             p.openInventory(inv);
         } catch(Exception ex){plugin.getLogger().severe("Marketplace query failed: "+ex.getMessage());p.sendMessage("Marketplace could not be loaded.");}
     }
@@ -154,7 +148,6 @@ public final class MarketInventoryListener implements Listener {
     public void openHistory(Player p) {
         try {
             var records=plugin.repository().historyFor(p.getUniqueId(),45);
-            YamlConfigurationPlaceholder unused = null;
             Inventory inv=Bukkit.createInventory(new HistoryHolder(),guiSize("history",54),text(guiString("history.title","<dark_gray>Orders History</dark_gray>")));
             int slot=0;
             for(var record:records) {
@@ -220,21 +213,21 @@ public final class MarketInventoryListener implements Listener {
         e.setCancelled(true);if(e.getClickedInventory()!=e.getView().getTopInventory())return;
         int slot=e.getRawSlot();
         if(holder.step.equals("picker")){
-            if(slot==49){p.closeInventory();return;}
-            if(slot==45&&holder.page>0){openMaterialPicker(p,holder.page-1);return;}
-            if(slot==53){openMaterialPicker(p,holder.page+1);return;}
+            if(slot==guiInt("picker.cancel-slot",49)){p.closeInventory();return;}
+            if(slot==guiInt("picker.previous-slot",45)&&holder.page>0){openMaterialPicker(p,holder.page-1);return;}
+            if(slot==guiInt("picker.next-slot",53)){openMaterialPicker(p,holder.page+1);return;}
             ItemStack selected=e.getCurrentItem();if(selected==null||selected.getType().isAir()||!selected.getType().isItem())return;
             openCreateSettings(p,selected.getType(),16,plugin.getConfig().getDouble("orders.min-unit-price",0.01));return;
         }
-        if(slot==26){p.closeInventory();p.sendMessage("Order creation cancelled.");return;}
+        if(slot==guiInt("create.cancel-slot",26)){p.closeInventory();p.sendMessage("Order creation cancelled.");return;}
         int quantity=holder.quantity;double price=holder.price;
         int max=plugin.getConfig().getInt("orders.max-quantity",23040);
         double step=plugin.getConfig().getDouble("orders.gui-price-step",1.0);
-        if(slot==10)quantity=Math.max(1,quantity-1);
-        else if(slot==11)quantity=Math.min(max,quantity+1);
-        else if(slot==15)price=Math.max(plugin.getConfig().getDouble("orders.min-unit-price",0.01),Math.round((price-step)*100.0)/100.0);
-        else if(slot==16)price=Math.min(plugin.getConfig().getDouble("orders.max-unit-price",1_000_000_000.0),Math.round((price+step)*100.0)/100.0);
-        else if(slot==22){
+        if(slot==guiInt("create.decrease-quantity-slot",10))quantity=Math.max(1,quantity-1);
+        else if(slot==guiInt("create.increase-quantity-slot",11))quantity=Math.min(max,quantity+1);
+        else if(slot==guiInt("create.decrease-price-slot",15))price=Math.max(plugin.getConfig().getDouble("orders.min-unit-price",0.01),Math.round((price-step)*100.0)/100.0);
+        else if(slot==guiInt("create.increase-price-slot",16))price=Math.min(plugin.getConfig().getDouble("orders.max-unit-price",1_000_000_000.0),Math.round((price+step)*100.0)/100.0);
+        else if(slot==guiInt("create.confirm-slot",22)){
             try{long id=orders.create(p,holder.material,holder.quantity,holder.price);p.closeInventory();p.sendMessage("Order #"+id+" created; escrow reserved.");}
             catch(Exception ex){p.sendMessage("SuperOrders: "+(ex.getMessage()==null?"Could not create order.":ex.getMessage()));}
             return;
