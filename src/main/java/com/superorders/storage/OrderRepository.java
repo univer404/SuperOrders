@@ -33,14 +33,10 @@ public final class OrderRepository implements AutoCloseable {
         if (parent != null && !parent.exists() && !parent.mkdirs()) {
             throw new SQLException("Cannot create SuperOrders data folder");
         }
-        try {
-            data = YamlConfiguration.loadConfiguration(this.file);
-            if (!data.contains("schema-version")) data.set("schema-version", 1);
-            if (!data.contains("next-order-id")) data.set("next-order-id", 1L);
-            save();
-        } catch (IOException ex) {
-            throw new SQLException("Could not initialize YAML storage at " + this.file, ex);
-        }
+        data = YamlConfiguration.loadConfiguration(this.file);
+        if (!data.contains("schema-version")) data.set("schema-version", 1);
+        if (!data.contains("next-order-id")) data.set("next-order-id", 1L);
+        save();
     }
 
     public synchronized String recordTransaction(UUID actor, long orderId, int quantity, double amount,
