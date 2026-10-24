@@ -22,7 +22,7 @@ public final class SuperOrders extends JavaPlugin {
     private MarketInventoryListener marketListener;
     private FileConfiguration guiConfig;
     @Override public void onEnable() {
-        saveDefaultConfig(); saveResource("messages.yml", false); saveResource("gui.yml", false);
+        saveDefaultConfig(); saveResourceIfMissing("messages.yml"); saveResourceIfMissing("gui.yml");
         guiConfig = YamlConfiguration.loadConfiguration(new File(getDataFolder(), "gui.yml"));
         if (!setupEconomy()) { getLogger().severe("Vault-compatible economy provider not found. Disabling SuperOrders."); getServer().getPluginManager().disablePlugin(this); return; }
         try { if (!getDataFolder().exists() && !getDataFolder().mkdirs()) throw new SQLException("Cannot create plugin data folder"); repository = new OrderRepository(new File(getDataFolder(), "orders.yml")); }
@@ -47,6 +47,16 @@ public final class SuperOrders extends JavaPlugin {
             getLogger().info("PlaceholderAPI expansion registered.");
         }
         getLogger().info("SuperOrders loaded. Review the README transaction-safety notes before production use.");
+    }
+    private void saveResourceIfMissing(String path) {
+        File target = new File(getDataFolder(), path);
+        if (target.exists()) return;
+        File parent = target.getParentFile();
+        if (parent != null && !parent.exists() && !parent.mkdirs()) {
+            getLogger().severe("Could not create configuration directory for " + path);
+            return;
+        }
+        saveResource(path, false);
     }
     private boolean setupEconomy(){if(getServer().getPluginManager().getPlugin("Vault")==null)return false;RegisteredServiceProvider<Economy> p=getServer().getServicesManager().getRegistration(Economy.class);if(p==null)return false;economy=p.getProvider();return economy!=null;}
     public Economy economy(){return economy;} public OrderRepository repository(){return repository;} public OrderService orderService(){return orderService;} public DeliveryService deliveryService(){return deliveryService;} public MarketInventoryListener marketListener(){return marketListener;} public FileConfiguration guiConfig(){return guiConfig;} public void reloadGuiConfig(){guiConfig=YamlConfiguration.loadConfiguration(new File(getDataFolder(), "gui.yml"));}
