@@ -34,6 +34,17 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+      - name: Install PlaceholderAPI API from the official release
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-all-errors \
+            --output "$RUNNER_TEMP/PlaceholderAPI-2.12.2.jar" \
+            "https://github.com/PlaceholderAPI/PlaceholderAPI/releases/download/2.12.2/PlaceholderAPI-2.12.2.jar"
+          mvn --batch-mode --no-transfer-progress org.apache.maven.plugins:maven-install-plugin:3.1.3:install-file \
+            -Dfile="$RUNNER_TEMP/PlaceholderAPI-2.12.2.jar" \
+            -DgroupId=me.clip -DartifactId=placeholderapi -Dversion=2.12.2 \
+            -Dpackaging=jar -DgeneratePom=true
 
       - name: Validate Maven project
         run: mvn --batch-mode --no-transfer-progress validate
