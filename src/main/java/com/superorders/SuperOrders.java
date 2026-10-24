@@ -21,9 +21,11 @@ public final class SuperOrders extends JavaPlugin {
     private DeliveryService deliveryService;
     private MarketInventoryListener marketListener;
     private FileConfiguration guiConfig;
+    private File guiFile;
+    private long guiConfigLastModified = -1L;
     @Override public void onEnable() {
         saveDefaultConfig(); saveResourceIfMissing("messages.yml"); saveResourceIfMissing("gui.yml");
-        guiConfig = YamlConfiguration.loadConfiguration(new File(getDataFolder(), "gui.yml"));
+        reloadGuiConfig();
         if (!setupEconomy()) { getLogger().severe("Vault-compatible economy provider not found. Disabling SuperOrders."); getServer().getPluginManager().disablePlugin(this); return; }
         try { if (!getDataFolder().exists() && !getDataFolder().mkdirs()) throw new SQLException("Cannot create plugin data folder"); repository = new OrderRepository(new File(getDataFolder(), "orders.yml")); }
         catch(SQLException e){getLogger().severe("YAML storage initialization failed: "+e.getMessage());getServer().getPluginManager().disablePlugin(this);return;}
@@ -59,6 +61,15 @@ public final class SuperOrders extends JavaPlugin {
         saveResource(path, false);
     }
     private boolean setupEconomy(){if(getServer().getPluginManager().getPlugin("Vault")==null)return false;RegisteredServiceProvider<Economy> p=getServer().getServicesManager().getRegistration(Economy.class);if(p==null)return false;economy=p.getProvider();return economy!=null;}
-    public Economy economy(){return economy;} public OrderRepository repository(){return repository;} public OrderService orderService(){return orderService;} public DeliveryService deliveryService(){return deliveryService;} public MarketInventoryListener marketListener(){return marketListener;} public FileConfiguration guiConfig(){return guiConfig;} public void reloadGuiConfig(){guiConfig=YamlConfiguration.loadConfiguration(new File(getDataFolder(), "gui.yml"));}
+    public Economy economy(){return economy;} public OrderRepository repository(){return repository;} public OrderService orderService(){return orderService;} public DeliveryService deliveryService(){return deliveryService;} public MarketInventoryListener marketListener(){return marketListener;} public FileConfiguration guiConfig(){
+        if (guiFile == null) guiFile = new File(getDataFolder(), "gui.yml");
+        if (guiFile.exists() && guiFile.lastModified() != guiConfigLastModified) reloadGuiConfig();
+        return guiConfig;
+    }
+    public void reloadGuiConfig(){
+        if (guiFile == null) guiFile = new File(getDataFolder(), "gui.yml");
+        guiConfig = YamlConfiguration.loadConfiguration(guiFile);
+        guiConfigLastModified = guiFile.exists() ? guiFile.lastModified() : -1L;
+    }
     @Override public void onDisable(){if(repository!=null)repository.close();}
 }
