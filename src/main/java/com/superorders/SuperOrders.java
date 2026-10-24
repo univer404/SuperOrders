@@ -28,15 +28,11 @@ public final class SuperOrders extends JavaPlugin {
         try { if (!getDataFolder().exists() && !getDataFolder().mkdirs()) throw new SQLException("Cannot create plugin data folder"); repository = new OrderRepository(new File(getDataFolder(), "orders.yml")); }
         catch(SQLException e){getLogger().severe("YAML storage initialization failed: "+e.getMessage());getServer().getPluginManager().disablePlugin(this);return;}
         if (getConfig().getBoolean("transactions.recovery-on-startup", true)) {
-            try {
-                int pendingRefunds = repository.pendingRefundCount();
-                int pendingTransactions = repository.pendingTransactionCount();
-                if (pendingRefunds > 0 || pendingTransactions > 0) {
-                    getLogger().warning("Recovery review required: "+pendingRefunds+" refund obligations and "
-                            +pendingTransactions+" unresolved transactions. Use /orders admin recover; no payouts are retried automatically.");
-                }
-            } catch (SQLException e) {
-                getLogger().severe("Could not inspect recovery journal on startup: "+e.getMessage());
+            int pendingRefunds = repository.pendingRefundCount();
+            int pendingTransactions = repository.pendingTransactionCount();
+            if (pendingRefunds > 0 || pendingTransactions > 0) {
+                getLogger().warning("Recovery review required: "+pendingRefunds+" refund obligations and "
+                        +pendingTransactions+" unresolved transactions. Use /orders admin recover; no payouts are retried automatically.");
             }
         }
         orderService = new OrderService(this);
@@ -54,5 +50,5 @@ public final class SuperOrders extends JavaPlugin {
     }
     private boolean setupEconomy(){if(getServer().getPluginManager().getPlugin("Vault")==null)return false;RegisteredServiceProvider<Economy> p=getServer().getServicesManager().getRegistration(Economy.class);if(p==null)return false;economy=p.getProvider();return economy!=null;}
     public Economy economy(){return economy;} public OrderRepository repository(){return repository;} public OrderService orderService(){return orderService;} public DeliveryService deliveryService(){return deliveryService;} public MarketInventoryListener marketListener(){return marketListener;} public FileConfiguration guiConfig(){return guiConfig;} public void reloadGuiConfig(){guiConfig=YamlConfiguration.loadConfiguration(new File(getDataFolder(), "gui.yml"));}
-    @Override public void onDisable(){if(repository!=null)try{repository.close();}catch(SQLException e){getLogger().severe("SQLite close failed: "+e.getMessage());}}
+    @Override public void onDisable(){if(repository!=null)repository.close();}
 }
