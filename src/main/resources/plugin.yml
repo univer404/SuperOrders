@@ -1,0 +1,40 @@
+name: SuperOrders
+version: 1.0.0
+main: com.superorders.SuperOrders
+api-version: '1.21'
+authors: [univer404]
+description: Player-driven buy-order marketplace with escrow and Vault economy.
+depend: [Vault]
+softdepend: [PlaceholderAPI]
+commands:
+  orders:
+    description: Open the SuperOrders marketplace.
+    usage: /orders [market|create|mine|cancel|history|help|admin]
+    aliases: [buyorders]
+permissions:
+  superorders.use:
+    default: true
+  superorders.create:
+    default: true
+  superorders.market:
+    default: true
+  superorders.mine:
+    default: true
+  superorders.history:
+    default: true
+  superorders.cancel:
+    default: true
+  superorders.admin:
+    default: op
+  superorders.admin.reload:
+    default: op
+  superorders.admin.inspect:
+    default: op
+  superorders.admin.cancel:
+    default: op
+  superorders.admin.refund:
+    default: op
+  superorders.admin.recover:
+    default: op
+  superorders.admin.debug:
+    default: op

@@ -1,0 +1,51 @@
+name: Build SuperOrders
+
+on:
+  push:
+    branches:
+      - main
+      - feature/superorders-foundation
+  pull_request:
+    branches:
+      - main
+      - feature/superorders-foundation
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: superorders-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Compile, test, and package
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Validate Maven project
+        run: mvn --batch-mode --no-transfer-progress validate
+
+      - name: Run tests and build plugin
+        run: mvn --batch-mode --no-transfer-progress clean verify
+
+      - name: Upload plugin JAR
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SuperOrders-${{ github.sha }}
+          path: target/SuperOrders-*.jar
+          if-no-files-found: error
+          retention-days: 14

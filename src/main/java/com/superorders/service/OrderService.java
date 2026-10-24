@@ -1,0 +1,134 @@
+package com.superorders.service;
+
+import com.superorders.SuperOrders;
+import com.superorders.model.BuyOrder;
+import com.superorders.model.OrderStatus;
+import org.bukkit.Material;
+import org.bukkit.entity.Player;
+import java.sql.SQLException;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
+
+public final class OrderService {
+    private final SuperOrders plugin;
+    private final ConcurrentHashMap<Long, ReentrantLock> locks = new ConcurrentHashMap<>();
+    public OrderService(SuperOrders plugin) { this.plugin = plugin; }
+
+    public synchronized long create(Player player, Material material, int quantity, double unitPrice) throws Exception {
+        if (material == null || material.isAir() || !material.isItem()) throw new IllegalArgumentException("That item cannot be ordered.");
+        if (quantity < 1 || quantity > plugin.getConfig().getInt("orders.max-quantity", 23040)) throw new IllegalArgumentException("Quantity is outside the allowed range.");
+        if (!Double.isFinite(unitPrice) || unitPrice < plugin.getConfig().getDouble("orders.min-unit-price", 0.01) || unitPrice > plugin.getConfig().getDouble("orders.max-unit-price", 1_000_000_000.0)) throw new IllegalArgumentException("Price is outside the allowed range.");
+        double total = unitPrice * quantity;
+        if (!Double.isFinite(total) || total > plugin.getConfig().getDouble("orders.max-total-value", 1_000_000_000.0)) throw new IllegalArgumentException("Total order value is too high.");
+        if (plugin.repository().countActive(player.getUniqueId()) >= plugin.getConfig().getInt("orders.max-active-per-player", 10)) throw new IllegalArgumentException("You already have the maximum number of active orders.");
+        var allowed = plugin.getConfig().getStringList("orders.allowed-materials");
+        var blocked = plugin.getConfig().getStringList("orders.blocked-materials");
+        if (!allowed.isEmpty() && !allowed.contains(material.name())) throw new IllegalArgumentException("That material is not allowed.");
+        if (blocked.contains(material.name())) throw new IllegalArgumentException("That material is blocked.");
+        double balance = plugin.economy().getBalance(player);
+        if (!Double.isFinite(balance) || balance + 1e-8 < total) throw new IllegalArgumentException("Your balance could not be validated or is too low.");
+        String transactionId = plugin.repository().recordTransaction(player.getUniqueId(), 0, quantity, total, "ESCROW_WITHDRAW_PENDING",
+                "Order creation intent; material=" + material.name() + "; owner=" + player.getUniqueId());
+        var response = plugin.economy().withdrawPlayer(player, total);
+        if (!response.transactionSuccess()) {
+            plugin.repository().setTransactionState(transactionId, "WITHDRAW_FAILED", response.errorMessage);
+            throw new IllegalStateException("Economy withdrawal failed: " + response.errorMessage);
+        }
+        long now = System.currentTimeMillis();
+        long lifetime = plugin.getConfig().getLong("orders.expiration.default-lifetime-hours", 168) * 3_600_000L;
+        long orderId;
+        try {
+            orderId = plugin.repository().create(player.getUniqueId(), player.getName(), material, quantity, unitPrice, total, now,
+                    plugin.getConfig().getBoolean("orders.expiration.enabled", true) ? now + lifetime : Long.MAX_VALUE);
+        } catch (Exception dbFailure) {
+            var refund = plugin.economy().depositPlayer(player, total);
+            if (refund.transactionSuccess()) plugin.repository().setTransactionState(transactionId, "COMPENSATED", "Order persistence failed; escrow returned.");
+            else {
+                plugin.getLogger().severe("CRITICAL: failed to compensate order creation withdrawal for " + player.getUniqueId() + " amount=" + total);
+                plugin.repository().setTransactionState(transactionId, "FAILED_REQUIRES_REVIEW", "Order persistence failed and compensation could not be confirmed: " + dbFailure.getMessage());
+                try { plugin.repository().recordRefundObligation(player.getUniqueId(), total, "Failed order-creation compensation transaction " + transactionId); }
+                catch (Exception recordFailure) { plugin.getLogger().severe("CRITICAL: could not persist compensation obligation: " + recordFailure.getMessage()); }
+            }
+            throw dbFailure;
+        }
+        try { plugin.repository().setTransactionState(transactionId, "ESCROW_RESERVED", "Created order #" + orderId); }
+        catch (Exception journalFailure) { plugin.getLogger().severe("Order #" + orderId + " was created and escrow withdrawn, but its journal update failed. Requires review: " + transactionId); }
+        return orderId;
+    }
+
+    public boolean cancel(Player actor, long orderId, boolean admin) throws Exception {
+        ReentrantLock lock = locks.computeIfAbsent(orderId, ignored -> new ReentrantLock());
+        lock.lock();
+        try {
+            BuyOrder order = plugin.repository().find(orderId);
+            if (order == null || order.status() != OrderStatus.ACTIVE) throw new IllegalArgumentException("That order is not active.");
+            if (plugin.repository().hasUnresolvedDelivery(orderId)) throw new IllegalStateException("This order has an interrupted delivery. An administrator must resolve it before cancellation.");
+            if (!admin && !order.ownerId().equals(actor.getUniqueId())) throw new IllegalArgumentException("You do not own that order.");
+            double refundAmount = order.remainingEscrow();
+            String obligation = plugin.repository().cancelAndRecordRefund(orderId, OrderStatus.CANCELLED, order.ownerId(), refundAmount, "Order cancellation #" + orderId);
+            if (refundAmount > 0) {
+                // Claim before calling Vault. If the server stops during the payout, PROCESSING
+                // prevents an automatic or accidental second payment until history is reconciled.
+                if (!plugin.repository().claimRefundObligation(obligation)) {
+                    actor.sendMessage("Order cancelled, but its refund is already being processed. Check with an administrator before retrying.");
+                    return true;
+                }
+                try {
+                    var response = plugin.economy().depositPlayer(plugin.getServer().getOfflinePlayer(order.ownerId()), refundAmount);
+                    if (response.transactionSuccess()) {
+                        plugin.repository().finishRefundObligation(obligation, "PAID");
+                    } else {
+                        plugin.repository().finishRefundObligation(obligation, "REVIEW");
+                        actor.sendMessage("Refund was not confirmed. It is recorded for administrator review; do not retry blindly.");
+                    }
+                } catch (Exception payoutError) {
+                    // Leave PROCESSING when the provider outcome is ambiguous.
+                    plugin.getLogger().severe("Refund outcome uncertain for obligation " + obligation + ": " + payoutError.getMessage());
+                    actor.sendMessage("Refund outcome is uncertain. An administrator must check economy history before retrying.");
+                }
+            }
+            return true;
+        } finally { lock.unlock(); }
+    }
+
+    public void expireDueOrders() {
+        try {
+            for (BuyOrder order : plugin.repository().expiredActiveOrders(System.currentTimeMillis())) {
+                ReentrantLock lock = locks.computeIfAbsent(order.id(), ignored -> new ReentrantLock());
+                if (!lock.tryLock()) continue;
+                try {
+                    BuyOrder current = plugin.repository().find(order.id());
+                    if (current == null || current.status() != OrderStatus.ACTIVE || current.expiresAt() > System.currentTimeMillis()) continue;
+                    if (plugin.repository().hasUnresolvedDelivery(current.id())) {
+                        plugin.getLogger().warning("Skipping expiration/refund for order #"+current.id()+" because a delivery transaction needs recovery.");
+                        continue;
+                    }
+                    String obligation = plugin.repository().cancelAndRecordRefund(current.id(), OrderStatus.EXPIRED, current.ownerId(), current.remainingEscrow(), "Expired order #" + current.id());
+                    if (current.remainingEscrow() > 0) {
+                        if (plugin.repository().claimRefundObligation(obligation)) {
+                            try {
+                                var response = plugin.economy().depositPlayer(plugin.getServer().getOfflinePlayer(current.ownerId()), current.remainingEscrow());
+                                if (response.transactionSuccess()) {
+                                    plugin.repository().finishRefundObligation(obligation, "PAID");
+                                } else {
+                                    plugin.repository().finishRefundObligation(obligation, "REVIEW");
+                                    plugin.getLogger().warning("Expiration refund was not confirmed for obligation " + obligation + "; administrator review required.");
+                                }
+                            } catch (Exception payoutError) {
+                                // Keep PROCESSING for ambiguous provider outcomes; never auto-pay twice.
+                                plugin.getLogger().severe("Expiration refund outcome uncertain for obligation " + obligation + ": " + payoutError.getMessage());
+                            }
+                        } else {
+                            plugin.getLogger().warning("Could not claim expiration refund obligation " + obligation + "; administrator review required.");
+                        }
+                    }
+                    Player owner = plugin.getServer().getPlayer(current.ownerId());
+                    if (owner != null) owner.sendMessage("Your SuperOrders order #" + current.id() + " expired. Any refund that could not be processed was recorded for recovery.");
+                } finally { lock.unlock(); }
+            }
+        } catch (Exception ex) { plugin.getLogger().severe("Order expiration pass failed: " + ex.getMessage()); }
+    }
+
+    public ReentrantLock lockFor(long id) { return locks.computeIfAbsent(id, ignored -> new ReentrantLock()); }
+}

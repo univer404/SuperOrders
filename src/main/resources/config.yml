@@ -1,0 +1,27 @@
+general:
+  debug: false
+orders:
+  max-quantity: 23040
+  min-unit-price: 0.01
+  max-unit-price: 1000000000.0
+  max-total-value: 1000000000.0
+  max-active-per-player: 10
+  expiration:
+    enabled: true
+    default-lifetime-hours: 168
+  allowed-materials: []
+  blocked-materials:
+    - AIR
+    - BEDROCK
+    - BARRIER
+economy:
+  currency-symbol: "$"
+marketplace:
+  title: "<dark_purple><bold>SuperOrders</bold></dark_purple>"
+  size: 54
+  page-size: 45
+delivery:
+  max-items-per-delivery: 23040
+transactions:
+  recovery-on-startup: true
+  retain-history-days: 180
