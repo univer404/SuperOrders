@@ -1,4 +1,6 @@
 # All SuperOrders inventory menus can be customized here. Keep sizes in multiples of 9 (9-54).
+# Text formats: MiniMessage tags (<#RRGGBB>, <gradient:#...:#...>, <rainbow>, <bold>, <italic>, etc.), legacy &a/&l codes, RGB &#RRGGBB and &x&F&F&0&0&A&A are supported.
+# Materials: use valid Bukkit material names such as DIAMOND_BLOCK, minecraft:diamond_block, or RED_STAINED_GLASS_PANE.
 marketplace:
   title: "<dark_purple><bold>SuperOrders</bold></dark_purple>"
   size: 54
