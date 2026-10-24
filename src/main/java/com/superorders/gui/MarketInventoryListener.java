@@ -77,13 +77,13 @@ public final class MarketInventoryListener implements Listener {
         e.setCancelled(true);
         if (e.getClickedInventory() != e.getView().getTopInventory()) return;
         int slot = e.getRawSlot();
-        if (slot == guiSlot("delivery.cancel-slot",26,inv.getSize())) {
+        if (slot == guiSlot("delivery.cancel-slot",26,e.getView().getTopInventory().getSize())) {
             p.closeInventory();
             return;
         }
-        if(slot==guiSlot("delivery.decrease-slot",10,inv.getSize())){openDelivery(p,holder.orderId,holder.material,holder.maxQuantity,Math.max(1,holder.quantity-1));return;}
-        if(slot==guiSlot("delivery.increase-slot",16,inv.getSize())){openDelivery(p,holder.orderId,holder.material,holder.maxQuantity,Math.min(holder.maxQuantity,holder.quantity+1));return;}
-        if(slot==guiSlot("delivery.continue-slot",22,inv.getSize())){
+        if(slot==guiSlot("delivery.decrease-slot",10,e.getView().getTopInventory().getSize())){openDelivery(p,holder.orderId,holder.material,holder.maxQuantity,Math.max(1,holder.quantity-1));return;}
+        if(slot==guiSlot("delivery.increase-slot",16,e.getView().getTopInventory().getSize())){openDelivery(p,holder.orderId,holder.material,holder.maxQuantity,Math.min(holder.maxQuantity,holder.quantity+1));return;}
+        if(slot==guiSlot("delivery.continue-slot",22,e.getView().getTopInventory().getSize())){
             BuyOrder order=findOrderQuietly(holder.orderId);
             if(order==null||order.status()!=OrderStatus.ACTIVE||holder.quantity>order.remainingQuantity()){p.sendMessage("Order changed. Reopen the marketplace and try again.");p.closeInventory();return;}
             double total=order.unitPrice()*holder.quantity;
@@ -191,7 +191,7 @@ public final class MarketInventoryListener implements Listener {
         Inventory inv=Bukkit.createInventory(new CreateHolder("picker",page,null,16,1.0),guiSize("picker",54),text(guiString("picker.title","<dark_gray>Select Item</dark_gray>")));
         int start=page*perPage,end=Math.min(materials.size(),start+perPage);
         for(int i=start;i<end;i++){Material material=materials.get(i);ItemStack icon=configuredItem("picker.item",material,"<light_purple>%material%</light_purple>",Map.of("%material%",material.name().replace('_',' ')));inv.setItem(i-start,icon);}
-        int previous=guiSlot("picker.previous-slot",45,e.getView().getTopInventory().getSize()), cancel=guiSlot("picker.cancel-slot",49,e.getView().getTopInventory().getSize()), next=guiSlot("picker.next-slot",53,e.getView().getTopInventory().getSize());
+        int previous=guiSlot("picker.previous-slot",45,inv.getSize()), cancel=guiSlot("picker.cancel-slot",49,inv.getSize()), next=guiSlot("picker.next-slot",53,inv.getSize());
         if(page>0&&previous>=0&&previous<inv.getSize())inv.setItem(previous,configuredItem("picker.previous",Material.ARROW,"<yellow>Previous Items",Map.of()));
         if(cancel>=0&&cancel<inv.getSize())inv.setItem(cancel,configuredItem("picker.cancel",Material.BARRIER,"<red>Cancel",Map.of()));
         if(page<maxPage&&next>=0&&next<inv.getSize())inv.setItem(next,configuredItem("picker.next",Material.ARROW,"<yellow>Next Items",Map.of()));
@@ -256,11 +256,11 @@ public final class MarketInventoryListener implements Listener {
         Inventory inv=Bukkit.createInventory(new DeliveryHolder(id,material,safeMax,safeQuantity),guiSize("delivery",27),text(guiString("delivery.title","<dark_gray>Deliver to Order #%order_id%</dark_gray>").replace("%order_id%",String.valueOf(id))));
         Map<String,String> values=Map.of("%material%",material.name().replace('_',' '),"%requested%",String.valueOf(order.remainingQuantity()),"%quantity%",String.valueOf(safeQuantity),"%unit_price%",String.valueOf(order.unitPrice()),"%payout%",String.valueOf(order.unitPrice()*safeQuantity));
         inv.setItem(guiSlot("delivery.info-slot",13,inv.getSize()),configuredItem("delivery.info",material,"<light_purple>%material%</light_purple>",values));
-        inv.setItem(guiSlot("delivery.decrease-slot",10,e.getView().getTopInventory().getSize()),configuredItem("delivery.decrease",Material.REDSTONE,"<red>Decrease quantity",Map.of()));
+        inv.setItem(guiSlot("delivery.decrease-slot",10,inv.getSize()),configuredItem("delivery.decrease",Material.REDSTONE,"<red>Decrease quantity",Map.of()));
         inv.setItem(guiSlot("delivery.quantity-slot",11,inv.getSize()),configuredItem("delivery.quantity",Material.PAPER,"<yellow>Selected: %quantity%",values));
-        inv.setItem(guiSlot("delivery.increase-slot",16,e.getView().getTopInventory().getSize()),configuredItem("delivery.increase",Material.LIME_DYE,"<green>Increase quantity",Map.of()));
-        inv.setItem(guiSlot("delivery.continue-slot",22,e.getView().getTopInventory().getSize()),configuredItem("delivery.continue",Material.EMERALD,"<green>Continue",Map.of()));
-        inv.setItem(guiSlot("delivery.cancel-slot",26,e.getView().getTopInventory().getSize()),configuredItem("delivery.cancel",Material.BARRIER,"<red>Cancel",Map.of()));
+        inv.setItem(guiSlot("delivery.increase-slot",16,inv.getSize()),configuredItem("delivery.increase",Material.LIME_DYE,"<green>Increase quantity",Map.of()));
+        inv.setItem(guiSlot("delivery.continue-slot",22,inv.getSize()),configuredItem("delivery.continue",Material.EMERALD,"<green>Continue",Map.of()));
+        inv.setItem(guiSlot("delivery.cancel-slot",26,inv.getSize()),configuredItem("delivery.cancel",Material.BARRIER,"<red>Cancel",Map.of()));
         p.openInventory(inv);
     }
     @EventHandler public void onChat(AsyncPlayerChatEvent e){Player p=e.getPlayer();InputState s=inputs.get(p.getUniqueId());if(s==null)return;e.setCancelled(true);String msg=e.getMessage().trim();Bukkit.getScheduler().runTask(plugin,()->process(p,s,msg));}
