@@ -6,7 +6,8 @@
   <repositories>
     <repository><id>papermc</id><url>https://repo.papermc.io/repository/maven-public/</url></repository>
     <repository><id>jitpack.io</id><url>https://jitpack.io</url></repository>
-      <repository><id>placeholderapi</id><url>https://repo.helpch.at/releases/</url></repository>
+      <repository><id>placeholderapi</id><url>https://repo.helpch.at/releases/</url><releases><enabled>true</enabled></releases><snapshots><enabled>false</enabled></snapshots></repository>
+    <repository><id>placeholderapi-fallback</id><url>https://repo.extendedclip.com/releases/</url><releases><enabled>true</enabled></releases><snapshots><enabled>false</enabled></snapshots></repository>
 </repositories>
   <dependencies>
     <dependency><groupId>io.papermc.paper</groupId><artifactId>paper-api</artifactId><version>1.21.11-R0.1-SNAPSHOT</version><scope>provided</scope></dependency>
