@@ -1,5 +1,7 @@
 package com.superorders.gui;
 
+import com.superorders.util.GuiText;
+
 import com.superorders.SuperOrders;
 import com.superorders.model.BuyOrder;
 import com.superorders.model.OrderStatus;
@@ -280,14 +282,14 @@ public final class MarketInventoryListener implements Listener {
     }
     // Minecraft item names and lore default to italic. Disable it consistently for straight, readable GUI text.
     private Component text(String input) {
-        return mm.deserialize(input).decoration(TextDecoration.ITALIC, false);
+        return GuiText.component(input);
     }
 
     private String guiString(String path,String fallback){return plugin.guiConfig().getString(path,fallback);}
     private int guiInt(String path,int fallback){return plugin.guiConfig().getInt(path,fallback);}
     private int guiSize(String path,int fallback){int size=guiInt(path+".size",fallback);return size>=9&&size<=54&&size%9==0?size:fallback;}
     private int guiSlot(String path,int fallback,int size){int slot=guiInt(path,fallback);return slot>=0&&slot<size?slot:fallback>=0&&fallback<size?fallback:Math.max(0,size-1);}
-    private Material guiMaterial(String path,Material fallback){Material material=Material.matchMaterial(guiString(path,fallback.name()));return material==null||!material.isItem()?fallback:material;}
+    private Material guiMaterial(String path,Material fallback){String configured=guiString(path,fallback.name());Material material=configured==null?null:Material.matchMaterial(configured.trim());if(material==null||!material.isItem()){plugin.getLogger().warning("Invalid GUI material at gui.yml "+path+": "+configured+". Using "+fallback.name()+".");return fallback;}return material;}
     private ItemStack configuredItem(String path,Material fallback,String fallbackName,Map<String,String> replacements){
         Material material=guiMaterial(path+".material",fallback);ItemStack item=new ItemStack(material);ItemMeta meta=item.getItemMeta();
         if(meta==null)return item;String name=guiString(path+".name",fallbackName);for(var entry:replacements.entrySet())name=name.replace(entry.getKey(),entry.getValue());meta.displayName(text(name));
