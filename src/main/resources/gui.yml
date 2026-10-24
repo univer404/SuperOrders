@@ -8,3 +8,109 @@ marketplace:
   history-slot: 51
   previous-slot: 45
   next-slot: 53
+
+  filler:
+    material: GRAY_STAINED_GLASS_PANE
+    name: '<dark_gray> '
+  order-item:
+    name: '<aqua><bold>%material%</bold></aqua>'
+    lore:
+      - '<gray>Owner: <white>%owner%'
+      - '<gray>Remaining: <white>%remaining%'
+      - '<gray>Unit price: <green>%unit_price%'
+      - '<gray>Order value: <green>%order_value%'
+      - '<dark_gray>Order #%order_id%'
+      - '<yellow>Click to deliver items'
+  history:
+    title: '<dark_gray>Orders History</dark_gray>'
+    size: 54
+    item:
+      material: PAPER
+      name: '<light_purple>%state%</light_purple>'
+      lore:
+        - '<gray>Order: <white>#%order_id%'
+        - '<gray>Quantity: <white>%quantity%'
+        - '<gray>Amount: <white>%amount%'
+        - '<gray>Actor: <white>%actor%'
+        - '<gray>Time: <white>%time%'
+        - '<dark_gray>%transaction_id%'
+        - '<gray>%details%'
+    empty:
+      slot: 22
+      material: PAPER
+      name: '<gray>No transactions recorded'
+  mine:
+    title: '<dark_gray>My Buy Orders</dark_gray>'
+    size: 54
+    content-slots: 45
+    item:
+      name: '<light_purple>Order #%order_id% - %material%</light_purple>'
+      lore:
+        - '<gray>Status: <white>%status%'
+        - '<gray>Remaining: <white>%remaining%/%original%'
+        - '<gray>Price each: <white>%unit_price%'
+        - '<gray>Escrow: <white>%escrow%'
+        - '<yellow>Order #%order_id%'
+        - '%action_lore%'
+    empty:
+      slot: 22
+      material: PAPER
+      name: '<gray>You have not created any orders yet'
+  picker:
+    title: '<dark_gray>Select Item</dark_gray>'
+    size: 54
+    items-per-page: 45
+    previous-slot: 45
+    cancel-slot: 49
+    next-slot: 53
+    item:
+      name: '<light_purple>%material%</light_purple>'
+      lore: ['<gray>Click to select this item']
+    previous: {material: ARROW, name: '<yellow>Previous Items'}
+    cancel: {material: BARRIER, name: '<red>Cancel'}
+    next: {material: ARROW, name: '<yellow>Next Items'}
+  create:
+    title: '<dark_gray>Configure Order</dark_gray>'
+    size: 27
+    item-slot: 4
+    decrease-quantity-slot: 10
+    increase-quantity-slot: 11
+    quantity-slot: 13
+    price-info-slot: 14
+    decrease-price-slot: 15
+    increase-price-slot: 16
+    confirm-slot: 22
+    cancel-slot: 26
+    decrease-quantity: {material: REDSTONE, name: '<red>Decrease Quantity'}
+    increase-quantity: {material: LIME_DYE, name: '<green>Increase Quantity'}
+    quantity: {material: PAPER, name: '<yellow>Quantity: %quantity%<gray> (click +/-'}
+    decrease-price: {material: GOLD_NUGGET, name: '<red>Lower Unit Price'}
+    increase-price: {material: GOLD_INGOT, name: '<green>Raise Unit Price'}
+    confirm: {material: EMERALD, name: '<green>Confirm Order'}
+    cancel: {material: BARRIER, name: '<red>Cancel'}
+    price-info:
+      material: GOLD_INGOT
+      name: '<yellow>Unit price: %price%'
+      lore: ['<gray>Total escrow: %total%', '<gray>Use +/- to adjust quantity and price.']
+  delivery:
+    title: '<dark_gray>Deliver to Order #%order_id%</dark_gray>'
+    size: 27
+    info-slot: 13
+    decrease-slot: 10
+    quantity-slot: 11
+    increase-slot: 16
+    continue-slot: 22
+    cancel-slot: 26
+    info:
+      name: '<light_purple>%material%</light_purple>'
+      lore:
+        - '<gray>Requested: <white>%requested%'
+        - '<gray>Selected: <white>%quantity%'
+        - '<gray>Price each: <white>%unit_price%'
+        - '<gray>Estimated payout: <white>%payout%'
+        - '<yellow>Items are removed only when delivery begins.'
+    decrease: {material: REDSTONE, name: '<red>Decrease quantity'}
+    quantity: {material: PAPER, name: '<yellow>Selected: %quantity%'}
+    increase: {material: LIME_DYE, name: '<green>Increase quantity'}
+    continue: {material: EMERALD, name: '<green>Continue'}
+    cancel: {material: BARRIER, name: '<red>Cancel'}
