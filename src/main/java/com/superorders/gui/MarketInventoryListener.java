@@ -154,7 +154,7 @@ public final class MarketInventoryListener implements Listener {
                 if (slot >= inv.getSize()) break;
                 Map<String,String> values=Map.of("%state%",record.state(),"%order_id%",String.valueOf(record.orderId()),
                         "%quantity%",String.valueOf(record.quantity()),"%amount%",String.valueOf(record.amount()),"%actor%",String.valueOf(record.actorUuid()),
-                        "%time%",String.valueOf(java.time.Instant.ofEpochMilli(record.createdAt())),"%transaction_id%",record.transactionId(),"%details%",record.details());
+                        "%time%",String.valueOf(java.time.Instant.ofEpochMilli(record.createdAt())),"%transaction_id%",String.valueOf(record.transactionId()),"%details%",String.valueOf(record.details()));
                 ItemStack icon=configuredItem("history.item",Material.PAPER,"<light_purple>%state%</light_purple>",values);
                 inv.setItem(slot++,icon);
             }
@@ -215,9 +215,9 @@ public final class MarketInventoryListener implements Listener {
         e.setCancelled(true);if(e.getClickedInventory()!=e.getView().getTopInventory())return;
         int slot=e.getRawSlot();
         if(holder.step.equals("picker")){
-            if(slot==guiInt("picker.cancel-slot",49)){p.closeInventory();return;}
-            if(slot==guiInt("picker.previous-slot",45)&&holder.page>0){openMaterialPicker(p,holder.page-1);return;}
-            if(slot==guiInt("picker.next-slot",53)){openMaterialPicker(p,holder.page+1);return;}
+            if(slot==guiSlot("picker.cancel-slot",49,e.getView().getTopInventory().getSize())){p.closeInventory();return;}
+            if(slot==guiSlot("picker.previous-slot",45,e.getView().getTopInventory().getSize())&&holder.page>0){openMaterialPicker(p,holder.page-1);return;}
+            if(slot==guiSlot("picker.next-slot",53,e.getView().getTopInventory().getSize())){openMaterialPicker(p,holder.page+1);return;}
             ItemStack selected=e.getCurrentItem();if(selected==null||selected.getType().isAir()||!selected.getType().isItem())return;
             openCreateSettings(p,selected.getType(),16,plugin.getConfig().getDouble("orders.min-unit-price",0.01));return;
         }
